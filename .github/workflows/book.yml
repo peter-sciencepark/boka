@@ -1,0 +1,25 @@
+name: Friskis Auto-Book
+
+on:
+  schedule:
+    - cron: '*/30 15-20 * * *'  # Var 30:e min, 17-22 CET (15-20 UTC)
+  workflow_dispatch: {}
+
+jobs:
+  book:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run booker
+        env:
+          FRISKIS_USERNAME: ${{ secrets.FRISKIS_USERNAME }}
+          FRISKIS_PASSWORD: ${{ secrets.FRISKIS_PASSWORD }}
+        run: python -m friskis_booker book
