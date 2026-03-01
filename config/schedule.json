@@ -1,4 +1,8 @@
 [
-  {"weekday": 3, "name": "Hyrox hit", "location": "Jönköping - City", "time": "06:30"},
-  {"weekday": 7, "name": "HYROX Cirkel", "location": "Jönköping - City", "time": "16:30"}
+  {
+    "weekday": 7,
+    "name": "HYROX Cirkel",
+    "time": "16:30",
+    "location": "Jönköping - City"
+  }
 ]
