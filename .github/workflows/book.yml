@@ -2,7 +2,8 @@ name: Friskis Auto-Book
 
 on:
   schedule:
-    - cron: '*/30 15-20 * * *'  # Var 30:e min, 17-22 CET (15-20 UTC)
+    - cron: '50 6 * * *'         # 07:50 CET (06:50 UTC)
+    - cron: '*/30 15-19 * * *'   # Var 30:e min, 16-20 CET (15-19 UTC)
   workflow_dispatch: {}
 
 jobs:
