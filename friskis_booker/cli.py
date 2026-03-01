@@ -99,35 +99,40 @@ def check(schedule_path):
 @cli.command()
 @click.option("--push/--no-push", default=True, help="Committa och pusha till GitHub")
 def setup(push):
-    """Välj pass för nästa vecka interaktivt."""
+    """Ändra listan med pass som ska autobokas varje vecka."""
     username, password = get_credentials()
 
     client = BRPClient()
     client.login(username, password)
 
-    # Hämta pass för nästa vecka (mån-sön) från alla locations
-    now = datetime.now(TZ)
-    days_until_monday = (7 - now.weekday()) % 7 or 7  # alltid nästa måndag
-    next_monday = now + timedelta(days=days_until_monday)
-    next_sunday = next_monday + timedelta(days=6)
-    start = next_monday.strftime("%Y-%m-%d")
-    end = next_sunday.strftime("%Y-%m-%d")
+    # Ladda befintligt schema
+    schedule_path = Path(__file__).resolve().parent.parent / "config" / "schedule.json"
+    current = load_schedule()
+    current_keys = {
+        (e["weekday"], e["name"].lower(), e.get("time", ""), e.get("location", "").lower())
+        for e in current
+    }
 
-    click.echo(f"Hämtar pass för nästa vecka ({start} — {end})...")
-    all_activities = []  # list of (activity, location_name)
+    # Hämta pass för idag + 7 dagar framåt (så vi alltid ser en hel vecka)
+    now = datetime.now(TZ)
+    start = now.strftime("%Y-%m-%d")
+    end_date = now + timedelta(days=7)
+    end = end_date.strftime("%Y-%m-%d")
+
+    click.echo(f"Hämtar tillgängliga pass ({start} — {end})...")
+    all_activities = []
     for loc in LOCATIONS:
         bid = client.get_business_unit_id(loc)
         if bid is None:
-            click.echo(f"  Varning: hittade inte {loc}")
             continue
         for a in client.get_group_activities(bid, start, end):
             all_activities.append((a, loc))
 
     if not all_activities:
-        click.echo("Inga pass publicerade för nästa vecka ännu. Passen dyker upp efter att denna veckas pass slutat.")
+        click.echo("Inga pass hittades.")
         sys.exit(1)
 
-    # Gruppera per dag, filtrera datum och passnamn
+    # Gruppera per dag, filtrera passnamn
     by_day = {}
     for a, loc_name in all_activities:
         if a.get("cancelled"):
@@ -139,14 +144,12 @@ def setup(push):
         if not start_str:
             continue
         dt = parse_dt(start_str).astimezone(TZ)
-        if dt.date() < next_monday.date() or dt.date() > next_sunday.date():
-            continue
         day_key = dt.isoweekday()
         by_day.setdefault(day_key, []).append((dt, a, loc_name))
 
-    # Visa unika pass (namn + veckodag + tid + location)
-    seen = set()
+    # Bygg valbar lista med unika pass
     choices = []
+    seen = set()
     for day in sorted(by_day.keys()):
         for dt, a, loc_name in sorted(by_day[day], key=lambda x: x[0]):
             name = a.get("name", "?")
@@ -155,23 +158,43 @@ def setup(push):
             if key in seen:
                 continue
             seen.add(key)
-            choices.append({"weekday": day, "name": name, "time": time_str, "location": loc_name})
+            is_selected = (day, name.lower(), time_str, loc_name.lower()) in current_keys
+            choices.append({
+                "weekday": day, "name": name, "time": time_str,
+                "location": loc_name, "selected": is_selected,
+            })
 
     if not choices:
-        click.echo("Inga matchande pass hittades för nästa vecka.")
+        click.echo("Inga matchande pass hittades.")
         sys.exit(1)
 
-    click.echo("\nTillgängliga pass:\n")
+    # Visa nuvarande schema
+    if current:
+        click.echo("\nNuvarande schema:")
+        for e in current:
+            day = WEEKDAYS[e["weekday"] - 1]
+            click.echo(f"  {day} {e.get('time', '—')} — {e['name']} ({e.get('location', '?')})")
+
+    # Visa alla pass, markera redan valda
+    click.echo("\nTillgängliga pass (* = redan vald):\n")
     for i, c in enumerate(choices, 1):
         day = WEEKDAYS[c["weekday"] - 1]
-        click.echo(f"  {i:2d}. {day:8s} {c['time']}  {c['name']:25s} ({c['location']})")
+        marker = "*" if c["selected"] else " "
+        click.echo(f"  {marker} {i:2d}. {day:8s} {c['time']}  {c['name']:25s} ({c['location']})")
 
-    click.echo(f"\nVälj pass att boka (kommaseparerade nummer, t.ex. 1,3,5):")
+    # Bygg lista av redan valda nummer
+    pre_selected = [str(i + 1) for i, c in enumerate(choices) if c["selected"]]
+    pre_str = ",".join(pre_selected) if pre_selected else ""
+
+    click.echo(f"\nVälj pass (kommaseparerade nummer, Enter för att behålla [{pre_str}]):")
     raw = input("> ").strip()
 
     if not raw:
-        click.echo("Inget valt, avbryter.")
-        return
+        if pre_selected:
+            raw = pre_str
+        else:
+            click.echo("Inget valt, avbryter.")
+            return
 
     selected = []
     for part in raw.split(","):
@@ -183,14 +206,17 @@ def setup(push):
         if idx < 1 or idx > len(choices):
             click.echo(f"Utanför intervall: {idx}")
             return
-        selected.append(choices[idx - 1])
+        c = choices[idx - 1]
+        selected.append({
+            "weekday": c["weekday"], "name": c["name"],
+            "time": c["time"], "location": c["location"],
+        })
 
-    click.echo("\nDitt schema:")
+    click.echo("\nUppdaterat schema:")
     for s in selected:
         day = WEEKDAYS[s["weekday"] - 1]
         click.echo(f"  {day} {s['time']} — {s['name']} ({s['location']})")
 
-    schedule_path = Path(__file__).resolve().parent.parent / "config" / "schedule.json"
     with open(schedule_path, "w") as f:
         json.dump(selected, f, indent=2, ensure_ascii=False)
     click.echo(f"\nSparat till {schedule_path}")
