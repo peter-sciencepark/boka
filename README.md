@@ -29,6 +29,28 @@ Alla kommandon körs med `friskis` från terminalen.
 3. Tryck Enter utan att skriva något för att behålla befintligt schema
 4. Schemat pushas automatiskt till GitHub — Actions tar hand om resten
 
+## schedule.json — exempel
+
+Du kan redigera `config/schedule.json` direkt på GitHub eller via `friskis setup`. Varje pass har `weekday` (1=Måndag, 7=Söndag), `name`, `time` och `location`.
+
+Kopiera och anpassa:
+
+```json
+[
+  {"weekday": 1, "name": "Skivstång",          "time": "17:30", "location": "Jönköping - City"},
+  {"weekday": 1, "name": "SkivstångIntervall",  "time": "18:30", "location": "Jönköping - Skeppsbron"},
+  {"weekday": 2, "name": "Cirkelfys",           "time": "07:00", "location": "Jönköping - City"},
+  {"weekday": 3, "name": "HYROX Hit",           "time": "06:30", "location": "Jönköping - City"},
+  {"weekday": 4, "name": "Multifys skivstång",  "time": "17:30", "location": "Jönköping - City"},
+  {"weekday": 5, "name": "Skivstång",           "time": "16:30", "location": "Jönköping - Skeppsbron"},
+  {"weekday": 7, "name": "HYROX Cirkel",        "time": "16:30", "location": "Jönköping - City"}
+]
+```
+
+Tillgängliga passnamn: `HYROX Hit`, `HYROX Cirkel`, `Skivstång`, `SkivstångIntervall`, `Cirkelfys`, `Multifys skivstång`.
+
+**Tips:** Redigerar du direkt på GitHub, glöm inte komma `,` mellan varje objekt.
+
 ## Anläggningar och passfilter
 
 Bokaren hämtar pass från:
