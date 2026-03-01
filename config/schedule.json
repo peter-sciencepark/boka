@@ -4,5 +4,47 @@
     "name": "HYROX HIT",
     "time": "17:15",
     "location": "Jönköping - City"
+  },
+  {
+    "weekday": 1,
+    "name": "HYROX HIT",
+    "time": "11:45",
+    "location": "Jönköping - City"
+  },
+  {
+    "weekday": 2,
+    "name": "HYROX HIT",
+    "time": "17:30",
+    "location": "Jönköping - City"
+  },
+  {
+    "weekday": 3,
+    "name": "HYROX HIT",
+    "time": "06:30",
+    "location": "Jönköping - City"
+  },
+  {
+    "weekday": 4,
+    "name": "Skivstång",
+    "time": "17:30",
+    "location": "Jönköping - Skeppsbron"
+  },
+  {
+    "weekday": 5,
+    "name": "Skivstång",
+    "time": "16:30",
+    "location": "Jönköping - Skeppsbron"
+  },
+  {
+    "weekday": 6,
+    "name": "Cirkelfys",
+    "time": "12:00",
+    "location": "Jönköping - City"
+  },
+  {
+    "weekday": 7,
+    "name": "HYROX Cirkel",
+    "time": "16:30",
+    "location": "Jönköping - City"
   }
 ]
