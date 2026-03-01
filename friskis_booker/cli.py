@@ -102,14 +102,19 @@ def setup(push):
         click.echo("Kunde inte hitta Jönköping")
         sys.exit(1)
 
-    # Hämta pass för denna + nästa vecka
+    # Hämta pass för nästa vecka (mån-sön)
     now = datetime.now(TZ)
-    start = now.strftime("%Y-%m-%d")
-    end = (now + timedelta(days=14)).strftime("%Y-%m-%d")
+    days_until_monday = (7 - now.weekday()) % 7 or 7  # alltid nästa måndag
+    next_monday = now + timedelta(days=days_until_monday)
+    next_sunday = next_monday + timedelta(days=6)
+    start = next_monday.strftime("%Y-%m-%d")
+    end = next_sunday.strftime("%Y-%m-%d")
+
+    click.echo(f"Hämtar pass för nästa vecka ({start} — {end})...")
     activities = client.get_group_activities(business_unit_id, start, end)
 
     if not activities:
-        click.echo("Inga pass hittades.")
+        click.echo("Inga pass publicerade för nästa vecka ännu. Passen dyker upp efter att denna veckas pass slutat.")
         sys.exit(1)
 
     # Gruppera per dag och sortera
@@ -121,6 +126,9 @@ def setup(push):
         if not start_str:
             continue
         dt = parse_dt(start_str).astimezone(TZ)
+        # Filtrera bort pass som inte är nästa vecka
+        if dt.date() < next_monday.date() or dt.date() > next_sunday.date():
+            continue
         day_key = dt.isoweekday()
         by_day.setdefault(day_key, []).append((dt, a))
 

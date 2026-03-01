@@ -9,9 +9,16 @@ from zoneinfo import ZoneInfo
 from friskis_booker.api import BRPClient
 
 TZ = ZoneInfo("Europe/Stockholm")
+UTC = ZoneInfo("UTC")
 WEEKDAYS = ["Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag", "Lördag", "Söndag"]
 
 log = logging.getLogger(__name__)
+
+
+def parse_dt(s: str) -> datetime:
+    """Parse ISO datetime, handling .000Z that Python 3.9 can't."""
+    s = s.replace("Z", "+00:00")
+    return datetime.fromisoformat(s)
 
 
 def load_schedule(path: str | None = None) -> list[dict]:
@@ -32,7 +39,7 @@ def matches_entry(activity: dict, entry: dict) -> bool:
     if not start_str:
         return False
 
-    start = datetime.fromisoformat(start_str)
+    start = parse_dt(start_str).astimezone(TZ)
     if start.isoweekday() != entry["weekday"]:
         return False
 
@@ -60,7 +67,7 @@ def is_bookable(activity: dict) -> tuple[bool, str]:
 
     earliest_str = activity.get("bookableEarliest", "")
     if earliest_str:
-        earliest = datetime.fromisoformat(earliest_str)
+        earliest = parse_dt(earliest_str)
         if earliest.tzinfo is None:
             earliest = earliest.replace(tzinfo=TZ)
         if now < earliest:
@@ -68,7 +75,7 @@ def is_bookable(activity: dict) -> tuple[bool, str]:
 
     latest_str = activity.get("bookableLatest", "")
     if latest_str:
-        latest = datetime.fromisoformat(latest_str)
+        latest = parse_dt(latest_str)
         if latest.tzinfo is None:
             latest = latest.replace(tzinfo=TZ)
         if now > latest:
@@ -89,11 +96,22 @@ def run_booking(
         return []
 
     now = datetime.now(TZ)
-    start = now.strftime("%Y-%m-%d")
-    end = (now + timedelta(days=14)).strftime("%Y-%m-%d")
+    days_until_monday = (7 - now.weekday()) % 7 or 7
+    next_monday = now + timedelta(days=days_until_monday)
+    next_sunday = next_monday + timedelta(days=6)
+    start = next_monday.strftime("%Y-%m-%d")
+    end = next_sunday.strftime("%Y-%m-%d")
 
-    activities = client.get_group_activities(business_unit_id, start, end)
-    log.info("Hämtade %d pass från %s till %s", len(activities), start, end)
+    all_activities = client.get_group_activities(business_unit_id, start, end)
+    # Filtrera till enbart nästa vecka
+    activities = []
+    for a in all_activities:
+        s = a.get("duration", {}).get("start", "")
+        if s:
+            dt = parse_dt(s).astimezone(TZ)
+            if next_monday.date() <= dt.date() <= next_sunday.date():
+                activities.append(a)
+    log.info("Hämtade %d pass för nästa vecka (%s — %s)", len(activities), start, end)
 
     existing_bookings = client.get_bookings()
     booked_ids = set()
