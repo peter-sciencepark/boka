@@ -39,6 +39,11 @@ class BRPClient:
     def get_group_activities(
         self, business_unit_id: int, start: str, end: str
     ) -> list[dict]:
+        # API kräver fullständiga ISO-datetimes med .000Z
+        if len(start) == 10:
+            start = f"{start}T00:00:00.000Z"
+        if len(end) == 10:
+            end = f"{end}T23:59:59.000Z"
         resp = self.session.get(
             f"{BASE_URL}/businessunits/{business_unit_id}/groupactivities",
             params={"period.start": start, "period.end": end},
