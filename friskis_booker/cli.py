@@ -96,30 +96,26 @@ def check(schedule_path):
         click.echo(f"  {r['activity']} {r['time']} — {r['status']}")
 
 
-@cli.command()
-@click.option("--push/--no-push", default=True, help="Committa och pusha till GitHub")
-def setup(push):
-    """Ändra listan med pass som ska autobokas varje vecka."""
-    username, password = get_credentials()
+SCHEDULE_PATH = Path(__file__).resolve().parent.parent / "config" / "schedule.json"
 
-    client = BRPClient()
-    client.login(username, password)
 
-    # Ladda befintligt schema
-    schedule_path = Path(__file__).resolve().parent.parent / "config" / "schedule.json"
-    current = load_schedule()
-    current_keys = {
-        (e["weekday"], e["name"].lower(), e.get("time", ""), e.get("location", "").lower())
-        for e in current
-    }
+def save_and_push(schedule, push):
+    with open(SCHEDULE_PATH, "w") as f:
+        json.dump(schedule, f, indent=2, ensure_ascii=False)
+    click.echo(f"\nSparat till {SCHEDULE_PATH}")
+    if push:
+        repo_root = Path(__file__).resolve().parent.parent
+        subprocess.run(["git", "add", "config/schedule.json"], cwd=repo_root)
+        subprocess.run(["git", "commit", "-m", "Uppdatera schema"], cwd=repo_root)
+        subprocess.run(["git", "push"], cwd=repo_root)
+        click.echo("Pushat till GitHub!")
 
-    # Hämta pass för idag + 7 dagar framåt (så vi alltid ser en hel vecka)
+
+def fetch_available_activities(client):
     now = datetime.now(TZ)
     start = now.strftime("%Y-%m-%d")
-    end_date = now + timedelta(days=7)
-    end = end_date.strftime("%Y-%m-%d")
+    end = (now + timedelta(days=7)).strftime("%Y-%m-%d")
 
-    click.echo(f"Hämtar tillgängliga pass ({start} — {end})...")
     all_activities = []
     for loc in LOCATIONS:
         bid = client.get_business_unit_id(loc)
@@ -128,11 +124,6 @@ def setup(push):
         for a in client.get_group_activities(bid, start, end):
             all_activities.append((a, loc))
 
-    if not all_activities:
-        click.echo("Inga pass hittades.")
-        sys.exit(1)
-
-    # Gruppera per dag, filtrera passnamn
     by_day = {}
     for a, loc_name in all_activities:
         if a.get("cancelled"):
@@ -147,7 +138,6 @@ def setup(push):
         day_key = dt.isoweekday()
         by_day.setdefault(day_key, []).append((dt, a, loc_name))
 
-    # Bygg valbar lista med unika pass
     choices = []
     seen = set()
     for day in sorted(by_day.keys()):
@@ -158,75 +148,112 @@ def setup(push):
             if key in seen:
                 continue
             seen.add(key)
-            is_selected = (day, name.lower(), time_str, loc_name.lower()) in current_keys
-            choices.append({
-                "weekday": day, "name": name, "time": time_str,
-                "location": loc_name, "selected": is_selected,
-            })
+            choices.append({"weekday": day, "name": name, "time": time_str, "location": loc_name})
+    return choices
 
-    if not choices:
-        click.echo("Inga matchande pass hittades.")
-        sys.exit(1)
 
-    # Visa nuvarande schema
-    if current:
-        click.echo("\nNuvarande schema:")
-        for e in current:
-            day = WEEKDAYS[e["weekday"] - 1]
-            click.echo(f"  {day} {e.get('time', '—')} — {e['name']} ({e.get('location', '?')})")
+def entry_key(e):
+    return (e["weekday"], e["name"].lower(), e.get("time", ""), e.get("location", "").lower())
 
-    # Visa alla pass, markera redan valda
-    click.echo("\nTillgängliga pass (* = redan vald):\n")
-    for i, c in enumerate(choices, 1):
+
+def print_schedule(schedule, header="Nuvarande schema"):
+    if not schedule:
+        click.echo(f"\n{header}: (tomt)")
+        return
+    click.echo(f"\n{header}:")
+    for e in sorted(schedule, key=lambda e: (e["weekday"], e.get("time", ""))):
+        day = WEEKDAYS[e["weekday"] - 1]
+        click.echo(f"  {day} {e.get('time', '—')} — {e['name']} ({e.get('location', '?')})")
+
+
+@cli.command()
+@click.option("--push/--no-push", default=True, help="Committa och pusha till GitHub")
+def add(push):
+    """Lägg till pass i schemat."""
+    username, password = get_credentials()
+    client = BRPClient()
+    client.login(username, password)
+
+    current = load_schedule()
+    current_set = {entry_key(e) for e in current}
+
+    print_schedule(current)
+
+    click.echo("\nHämtar tillgängliga pass...")
+    all_choices = fetch_available_activities(client)
+
+    # Visa bara pass som inte redan finns i schemat
+    available = [c for c in all_choices if entry_key(c) not in current_set]
+
+    if not available:
+        click.echo("Alla tillgängliga pass finns redan i schemat.")
+        return
+
+    click.echo("\nLägg till pass:\n")
+    for i, c in enumerate(available, 1):
         day = WEEKDAYS[c["weekday"] - 1]
-        marker = "*" if c["selected"] else " "
-        click.echo(f"  {marker} {i:2d}. {day:8s} {c['time']}  {c['name']:25s} ({c['location']})")
+        click.echo(f"  {i:2d}. {day:8s} {c['time']}  {c['name']:25s} ({c['location']})")
 
-    # Bygg lista av redan valda nummer
-    pre_selected = [str(i + 1) for i, c in enumerate(choices) if c["selected"]]
-    pre_str = ",".join(pre_selected) if pre_selected else ""
-
-    click.echo(f"\nVälj pass (kommaseparerade nummer, Enter för att behålla [{pre_str}]):")
+    click.echo("\nVälj pass att lägga till (kommaseparerade nummer, Enter för att avbryta):")
     raw = input("> ").strip()
 
     if not raw:
-        if pre_selected:
-            raw = pre_str
-        else:
-            click.echo("Inget valt, avbryter.")
-            return
+        click.echo("Avbryter.")
+        return
 
-    selected = []
+    to_add = []
     for part in raw.split(","):
         part = part.strip()
         if not part.isdigit():
             click.echo(f"Ogiltigt: {part}")
             return
         idx = int(part)
-        if idx < 1 or idx > len(choices):
+        if idx < 1 or idx > len(available):
             click.echo(f"Utanför intervall: {idx}")
             return
-        c = choices[idx - 1]
-        selected.append({
-            "weekday": c["weekday"], "name": c["name"],
-            "time": c["time"], "location": c["location"],
-        })
+        c = available[idx - 1]
+        to_add.append({"weekday": c["weekday"], "name": c["name"], "time": c["time"], "location": c["location"]})
 
-    click.echo("\nUppdaterat schema:")
-    for s in selected:
-        day = WEEKDAYS[s["weekday"] - 1]
-        click.echo(f"  {day} {s['time']} — {s['name']} ({s['location']})")
+    updated = current + to_add
+    print_schedule(updated, "Uppdaterat schema")
+    save_and_push(updated, push)
 
-    with open(schedule_path, "w") as f:
-        json.dump(selected, f, indent=2, ensure_ascii=False)
-    click.echo(f"\nSparat till {schedule_path}")
 
-    if push:
-        repo_root = Path(__file__).resolve().parent.parent
-        subprocess.run(["git", "add", "config/schedule.json"], cwd=repo_root)
-        subprocess.run(
-            ["git", "commit", "-m", "Uppdatera schema"],
-            cwd=repo_root,
-        )
-        subprocess.run(["git", "push"], cwd=repo_root)
-        click.echo("Pushat till GitHub!")
+@cli.command()
+@click.option("--push/--no-push", default=True, help="Committa och pusha till GitHub")
+def remove(push):
+    """Ta bort pass från schemat."""
+    current = load_schedule()
+
+    if not current:
+        click.echo("Schemat är tomt.")
+        return
+
+    click.echo("\nNuvarande schema:\n")
+    sorted_schedule = sorted(current, key=lambda e: (e["weekday"], e.get("time", "")))
+    for i, e in enumerate(sorted_schedule, 1):
+        day = WEEKDAYS[e["weekday"] - 1]
+        click.echo(f"  {i:2d}. {day:8s} {e.get('time', '—')}  {e['name']:25s} ({e.get('location', '?')})")
+
+    click.echo("\nVälj pass att ta bort (kommaseparerade nummer, Enter för att avbryta):")
+    raw = input("> ").strip()
+
+    if not raw:
+        click.echo("Avbryter.")
+        return
+
+    to_remove = set()
+    for part in raw.split(","):
+        part = part.strip()
+        if not part.isdigit():
+            click.echo(f"Ogiltigt: {part}")
+            return
+        idx = int(part)
+        if idx < 1 or idx > len(sorted_schedule):
+            click.echo(f"Utanför intervall: {idx}")
+            return
+        to_remove.add(idx - 1)
+
+    updated = [e for i, e in enumerate(sorted_schedule) if i not in to_remove]
+    print_schedule(updated, "Uppdaterat schema")
+    save_and_push(updated, push)
