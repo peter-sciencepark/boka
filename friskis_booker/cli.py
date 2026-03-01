@@ -11,7 +11,15 @@ import click
 from dotenv import load_dotenv
 
 from friskis_booker.api import BRPClient
-from friskis_booker.booker import WEEKDAYS, TZ, load_schedule, parse_dt, run_booking
+from friskis_booker.booker import (
+    ALLOWED_ACTIVITIES,
+    LOCATIONS,
+    WEEKDAYS,
+    TZ,
+    load_schedule,
+    parse_dt,
+    run_booking,
+)
 
 load_dotenv()
 
@@ -97,12 +105,7 @@ def setup(push):
     client = BRPClient()
     client.login(username, password)
 
-    business_unit_id = client.get_business_unit_id("Jönköping")
-    if business_unit_id is None:
-        click.echo("Kunde inte hitta Jönköping")
-        sys.exit(1)
-
-    # Hämta pass för nästa vecka (mån-sön)
+    # Hämta pass för nästa vecka (mån-sön) från alla locations
     now = datetime.now(TZ)
     days_until_monday = (7 - now.weekday()) % 7 or 7  # alltid nästa måndag
     next_monday = now + timedelta(days=days_until_monday)
@@ -111,44 +114,57 @@ def setup(push):
     end = next_sunday.strftime("%Y-%m-%d")
 
     click.echo(f"Hämtar pass för nästa vecka ({start} — {end})...")
-    activities = client.get_group_activities(business_unit_id, start, end)
+    all_activities = []  # list of (activity, location_name)
+    for loc in LOCATIONS:
+        bid = client.get_business_unit_id(loc)
+        if bid is None:
+            click.echo(f"  Varning: hittade inte {loc}")
+            continue
+        for a in client.get_group_activities(bid, start, end):
+            all_activities.append((a, loc))
 
-    if not activities:
+    if not all_activities:
         click.echo("Inga pass publicerade för nästa vecka ännu. Passen dyker upp efter att denna veckas pass slutat.")
         sys.exit(1)
 
-    # Gruppera per dag och sortera
+    # Gruppera per dag, filtrera datum och passnamn
     by_day = {}
-    for a in activities:
+    for a, loc_name in all_activities:
         if a.get("cancelled"):
+            continue
+        name = a.get("name", "")
+        if not any(allowed in name.lower() for allowed in ALLOWED_ACTIVITIES):
             continue
         start_str = a.get("duration", {}).get("start", "")
         if not start_str:
             continue
         dt = parse_dt(start_str).astimezone(TZ)
-        # Filtrera bort pass som inte är nästa vecka
         if dt.date() < next_monday.date() or dt.date() > next_sunday.date():
             continue
         day_key = dt.isoweekday()
-        by_day.setdefault(day_key, []).append((dt, a))
+        by_day.setdefault(day_key, []).append((dt, a, loc_name))
 
-    # Visa unika pass (namn + veckodag + tid), deduplika över veckor
+    # Visa unika pass (namn + veckodag + tid + location)
     seen = set()
     choices = []
     for day in sorted(by_day.keys()):
-        for dt, a in sorted(by_day[day], key=lambda x: x[0]):
+        for dt, a, loc_name in sorted(by_day[day], key=lambda x: x[0]):
             name = a.get("name", "?")
             time_str = dt.strftime("%H:%M")
-            key = (day, name, time_str)
+            key = (day, name, time_str, loc_name)
             if key in seen:
                 continue
             seen.add(key)
-            choices.append({"weekday": day, "name": name, "time": time_str})
+            choices.append({"weekday": day, "name": name, "time": time_str, "location": loc_name})
+
+    if not choices:
+        click.echo("Inga matchande pass hittades för nästa vecka.")
+        sys.exit(1)
 
     click.echo("\nTillgängliga pass:\n")
     for i, c in enumerate(choices, 1):
         day = WEEKDAYS[c["weekday"] - 1]
-        click.echo(f"  {i:2d}. {day:8s} {c['time']}  {c['name']}")
+        click.echo(f"  {i:2d}. {day:8s} {c['time']}  {c['name']:25s} ({c['location']})")
 
     click.echo(f"\nVälj pass att boka (kommaseparerade nummer, t.ex. 1,3,5):")
     raw = input("> ").strip()
@@ -169,14 +185,10 @@ def setup(push):
             return
         selected.append(choices[idx - 1])
 
-    # Lägg till location
-    for s in selected:
-        s["location"] = "Jönköping City"
-
     click.echo("\nDitt schema:")
     for s in selected:
         day = WEEKDAYS[s["weekday"] - 1]
-        click.echo(f"  {day} {s['time']} — {s['name']}")
+        click.echo(f"  {day} {s['time']} — {s['name']} ({s['location']})")
 
     schedule_path = Path(__file__).resolve().parent.parent / "config" / "schedule.json"
     with open(schedule_path, "w") as f:

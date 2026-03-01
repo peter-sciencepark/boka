@@ -12,6 +12,16 @@ TZ = ZoneInfo("Europe/Stockholm")
 UTC = ZoneInfo("UTC")
 WEEKDAYS = ["Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag", "Lördag", "Söndag"]
 
+LOCATIONS = ["Jönköping - City", "Jönköping - Skeppsbron"]
+ALLOWED_ACTIVITIES = [
+    "hyrox hit",
+    "hyrox cirkel",
+    "skivstång",
+    "skivstångintervall",
+    "cirkelfys",
+    "multifys skivstång",
+]
+
 log = logging.getLogger(__name__)
 
 
@@ -30,10 +40,14 @@ def load_schedule(path: str | None = None) -> list[dict]:
         return json.load(f)
 
 
-def matches_entry(activity: dict, entry: dict) -> bool:
+def matches_entry(activity: dict, entry: dict, location: str | None = None) -> bool:
     name = activity.get("name", "")
     if entry["name"].lower() not in name.lower():
         return False
+
+    if entry.get("location") and location:
+        if entry["location"].lower() != location.lower():
+            return False
 
     start_str = activity.get("duration", {}).get("start", "")
     if not start_str:
@@ -87,14 +101,8 @@ def is_bookable(activity: dict) -> tuple[bool, str]:
 def run_booking(
     client: BRPClient,
     schedule: list[dict],
-    location: str = "Jönköping",
     dry_run: bool = False,
 ) -> list[dict]:
-    business_unit_id = client.get_business_unit_id(location)
-    if business_unit_id is None:
-        log.error("Kunde inte hitta business unit för %s", location)
-        return []
-
     now = datetime.now(TZ)
     days_until_monday = (7 - now.weekday()) % 7 or 7
     next_monday = now + timedelta(days=days_until_monday)
@@ -102,15 +110,19 @@ def run_booking(
     start = next_monday.strftime("%Y-%m-%d")
     end = next_sunday.strftime("%Y-%m-%d")
 
-    all_activities = client.get_group_activities(business_unit_id, start, end)
-    # Filtrera till enbart nästa vecka
-    activities = []
-    for a in all_activities:
-        s = a.get("duration", {}).get("start", "")
-        if s:
-            dt = parse_dt(s).astimezone(TZ)
-            if next_monday.date() <= dt.date() <= next_sunday.date():
-                activities.append(a)
+    # Hämta pass från alla locations
+    activities = []  # list of (activity, location_name)
+    for loc in LOCATIONS:
+        bid = client.get_business_unit_id(loc)
+        if bid is None:
+            log.warning("Kunde inte hitta business unit för %s", loc)
+            continue
+        for a in client.get_group_activities(bid, start, end):
+            s = a.get("duration", {}).get("start", "")
+            if s:
+                dt = parse_dt(s).astimezone(TZ)
+                if next_monday.date() <= dt.date() <= next_sunday.date():
+                    activities.append((a, loc))
     log.info("Hämtade %d pass för nästa vecka (%s — %s)", len(activities), start, end)
 
     existing_bookings = client.get_bookings()
@@ -126,8 +138,8 @@ def run_booking(
     results = []
 
     for entry in schedule:
-        for activity in activities:
-            if not matches_entry(activity, entry):
+        for activity, loc in activities:
+            if not matches_entry(activity, entry, loc):
                 continue
 
             act_id = activity["id"]
