@@ -12,10 +12,10 @@
     "location": "Jönköping - City"
   },
   {
-    "weekday": 4,
-    "name": "Skivstång",
-    "time": "17:30",
-    "location": "Jönköping - Skeppsbron"
+    "weekday": 3,
+    "name": "HYROX Cirkel",
+    "time": "18:00",
+    "location": "Jönköping - City"
   },
   {
     "weekday": 5,
@@ -33,12 +33,6 @@
     "weekday": 7,
     "name": "HYROX Cirkel",
     "time": "16:30",
-    "location": "Jönköping - City"
-  },
-  {
-    "weekday": 3,
-    "name": "HYROX Cirkel",
-    "time": "18:00",
     "location": "Jönköping - City"
   }
 ]
