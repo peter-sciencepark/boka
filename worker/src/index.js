@@ -1,5 +1,5 @@
 const REPO_OWNER = "peter-sciencepark";
-const REPO_NAME = "friskis-booker";
+const REPO_NAME = "boka";
 const ALLOWED_USERS = ["peter", "alexandra"];
 const ALLOWED_ORIGIN = "https://peter-sciencepark.github.io";
 

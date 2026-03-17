@@ -1,0 +1,106 @@
+FRISKIS AUTO-BOOKER — MANUAL
+=============================
+
+Automatisk bokning av gruppträningspass på Friskis & Svettis Jönköping.
+
+
+HUR DET FUNGERAR
+-----------------
+1. Du väljer vilka pass du vill ha (via webben eller terminalen)
+2. GitHub Actions kör bokning automatiskt och bokar nästa veckas pass
+3. Bokning sker så fort passet blir bokningsbart (ca 30 min efter att denna veckas pass slutat)
+
+Schemat är veckoåterkommande — samma pass bokas varje vecka tills du ändrar.
+
+
+WEBBSIDA (för Alexandra och Peter)
+------------------------------------
+Öppna: https://peter-sciencepark.github.io/boka/
+
+1. Skriv in PIN-koden
+2. Välj användare (Alexandra eller Peter)
+3. Se dina nuvarande pass
+4. Lägg till pass: välj veckodag, aktivitet, tid och plats → klicka "Lägg till"
+5. Ta bort pass: klicka "Ta bort" på det pass du vill ta bort
+6. Klicka "Spara ändringar" när du är klar
+
+Ändringarna sparas direkt och bokas automatiskt.
+
+
+FLERA ANVÄNDARE
+----------------
+Varje person har sitt eget schema:
+- Peter: config/peter.json
+- Alexandra: config/alexandra.json
+
+På webben väljer du användare med knapparna högst upp.
+I terminalen lägger du till --user alexandra på kommandona.
+
+
+KOMMANDON (terminal)
+---------------------
+Alla kommandon körs med "friskis" från terminalen.
+
+  friskis add [--user]       Visa tillgängliga pass och lägg till i schemat
+  friskis remove [--user]    Visa schemat och välj pass att ta bort
+  friskis list [--user]      Visa nuvarande schema
+  friskis check [--user]     Kolla om nästa veckas pass går att boka
+  friskis book [--user]      Boka pass (körs automatiskt, men kan köras manuellt)
+  friskis book --dry-run     Visa vad som skulle bokas utan att boka
+
+Om --user utelämnas används peter som standard.
+
+
+VECKORUTIN
+-----------
+1. Kör "friskis list" för att se vad du har
+2. Kör "friskis add" för att lägga till nya pass
+3. Kör "friskis remove" för att ta bort pass du inte vill ha
+4. Välj pass genom att skriva numren kommaseparerat (t.ex. 1,3,5)
+5. Schemat pushas automatiskt — Actions tar hand om resten
+
+
+TILLGÄNGLIGA PASS
+------------------
+Bokaren hämtar pass från:
+- Jönköping - City
+- Jönköping - Skeppsbron
+
+Passtyper: HYROX HIT, HYROX Cirkel, Skivstång, SkivstångIntervall, Cirkelfys, Multifys skivstång.
+
+
+AUTOMATISK BOKNING (GitHub Actions)
+-------------------------------------
+Kör automatiskt för varje användare (Peter och Alexandra):
+- 07:50 varje morgon
+- Var 30:e minut 16:00–20:00 varje dag
+
+Manuell trigger: "gh workflow run book.yml" eller via GitHub-webben.
+
+
+INSTALLATIONSREFERENS
+----------------------
+Om du behöver installera om:
+
+  cd ~/boka
+  python3 -m venv .venv && source .venv/bin/activate
+  pip install -r requirements.txt
+  cp config/.env.example .env
+  # Redigera .env med credentials för alla användare
+
+Miljövariabler i .env:
+  FRISKIS_USERNAME_PETER=...
+  FRISKIS_PASSWORD_PETER=...
+  FRISKIS_USERNAME_ALEXANDRA=...
+  FRISKIS_PASSWORD_ALEXANDRA=...
+
+"friskis"-kommandot är en länk från ~/bin/friskis → ~/boka/friskis
+
+
+CLOUDFLARE WORKER
+------------------
+Webbredaktören använder en Cloudflare Worker som proxy.
+Deploy: cd worker && npx wrangler deploy
+Secrets (sätts via "npx wrangler secret put"):
+  - PIN: PIN-kod för webben
+  - GITHUB_PAT: GitHub Personal Access Token (repo-scope)
