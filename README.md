@@ -10,17 +10,36 @@ Automatisk bokning av gruppträningspass på Friskis & Svettis Jönköping.
 
 Schemat är **veckoåterkommande** — samma pass bokas varje vecka tills du ändrar.
 
+## Flera användare
+
+Systemet stödjer flera användare med separata scheman och inloggningar. Varje användare har sin egen schemafil under `config/`:
+
+| Användare | Schemafil |
+|-----------|-----------|
+| Peter | `config/peter.json` |
+| Alexandra | `config/alexandra.json` |
+
+Ange `--user` för att välja vems schema som ska användas:
+
+```bash
+friskis list --user peter       # Peters schema (default)
+friskis list --user alexandra   # Alexandras schema
+friskis add --user alexandra    # Lägg till pass för Alexandra
+```
+
+Om `--user` utelämnas används **peter** som standard.
+
 ## Kommandon
 
 Alla kommandon körs med `friskis` från terminalen.
 
 | Kommando | Vad det gör |
 |---|---|
-| `friskis add` | Visa tillgängliga pass och lägg till i schemat. Sparar och pushar till GitHub. |
-| `friskis remove` | Visa schemat och välj pass att ta bort. Sparar och pushar till GitHub. |
-| `friskis list` | Visa ditt nuvarande schema (utan att kontakta API:t) |
-| `friskis check` | Kolla om nästa veckas pass finns och om de går att boka |
-| `friskis book` | Boka nästa veckas pass (körs av GitHub Actions, men kan köras manuellt) |
+| `friskis add [--user]` | Visa tillgängliga pass och lägg till i schemat. Sparar och pushar till GitHub. |
+| `friskis remove [--user]` | Visa schemat och välj pass att ta bort. Sparar och pushar till GitHub. |
+| `friskis list [--user]` | Visa nuvarande schema (utan att kontakta API:t) |
+| `friskis check [--user]` | Kolla om nästa veckas pass finns och om de går att boka |
+| `friskis book [--user]` | Boka nästa veckas pass (körs av GitHub Actions, men kan köras manuellt) |
 | `friskis book --dry-run` | Visa vad som skulle bokas utan att boka |
 
 ## Veckorutin
@@ -31,9 +50,11 @@ Alla kommandon körs med `friskis` från terminalen.
 4. Välj pass genom att skriva numren kommaseparerat (t.ex. `1,3,5`)
 5. Schemat pushas automatiskt till GitHub — Actions tar hand om resten
 
-## schedule.json — exempel
+För Alexandra: lägg till `--user alexandra` på kommandona ovan.
 
-Du kan redigera `config/schedule.json` direkt på GitHub eller via `friskis add`/`friskis remove`. Varje pass har `weekday` (1=Måndag, 7=Söndag), `name`, `time` och `location`.
+## Schemafiler — exempel
+
+Varje användare har sin egen fil i `config/`. Du kan redigera den direkt på GitHub eller via `friskis add`/`friskis remove`. Varje pass har `weekday` (1=Måndag, 7=Söndag), `name`, `time` och `location`.
 
 Kopiera och anpassa:
 
@@ -65,13 +86,20 @@ Vill du ändra filter eller anläggningar, redigera `LOCATIONS` och `ALLOWED_ACT
 
 ## GitHub Actions
 
-Kör automatiskt:
+Kör automatiskt för **varje användare** (Peter och Alexandra):
 - **07:50** varje morgon
 - **Var 30:e minut 16:00–20:00** varje dag
 
 Secrets som behövs i repot:
-- `FRISKIS_USERNAME` — din e-post/personnummer
-- `FRISKIS_PASSWORD` — ditt lösenord
+
+| Secret | Beskrivning |
+|--------|-------------|
+| `FRISKIS_USERNAME_PETER` | Peters e-post/personnummer |
+| `FRISKIS_PASSWORD_PETER` | Peters lösenord |
+| `FRISKIS_USERNAME_ALEXANDRA` | Alexandras e-post/personnummer |
+| `FRISKIS_PASSWORD_ALEXANDRA` | Alexandras lösenord |
+| `FRISKIS_USERNAME` | (valfritt) Fallback för Peter, bakåtkompatibilitet |
+| `FRISKIS_PASSWORD` | (valfritt) Fallback för Peter, bakåtkompatibilitet |
 
 Manuell trigger: `gh workflow run book.yml` eller via GitHub-webben.
 
@@ -84,7 +112,16 @@ cd ~/friskis-booker
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp config/.env.example .env
-# Redigera .env med dina credentials
+# Redigera .env med credentials för alla användare
+```
+
+### Miljövariabler i .env
+
+```
+FRISKIS_USERNAME_PETER=...
+FRISKIS_PASSWORD_PETER=...
+FRISKIS_USERNAME_ALEXANDRA=...
+FRISKIS_PASSWORD_ALEXANDRA=...
 ```
 
 `friskis`-kommandot är en länk från `~/bin/friskis` → `~/friskis-booker/friskis`.

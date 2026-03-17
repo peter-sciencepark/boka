@@ -33,7 +33,7 @@ def parse_dt(s: str) -> datetime:
 
 def load_schedule(path: str | None = None) -> list[dict]:
     if path is None:
-        path = Path(__file__).resolve().parent.parent / "config" / "schedule.json"
+        path = Path(__file__).resolve().parent.parent / "config" / "peter.json"
     else:
         path = Path(path)
     with open(path) as f:

@@ -30,14 +30,33 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
+USERS = ["peter", "alexandra"]
+CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
 
-def get_credentials() -> tuple[str, str]:
-    username = os.environ.get("FRISKIS_USERNAME", "")
-    password = os.environ.get("FRISKIS_PASSWORD", "")
+
+def get_credentials(user: str) -> tuple[str, str]:
+    suffix = user.upper()
+    username = os.environ.get(f"FRISKIS_USERNAME_{suffix}", "")
+    password = os.environ.get(f"FRISKIS_PASSWORD_{suffix}", "")
+    # Fallback: old env vars for peter (backwards compat)
+    if not username and user == "peter":
+        username = os.environ.get("FRISKIS_USERNAME", "")
+    if not password and user == "peter":
+        password = os.environ.get("FRISKIS_PASSWORD", "")
     if not username or not password:
-        click.echo("Sätt FRISKIS_USERNAME och FRISKIS_PASSWORD som miljövariabler eller i .env")
+        click.echo(f"Sätt FRISKIS_USERNAME_{suffix} och FRISKIS_PASSWORD_{suffix} som miljövariabler eller i .env")
         sys.exit(1)
     return username, password
+
+
+def get_schedule_path(user: str) -> Path:
+    return CONFIG_DIR / f"{user}.json"
+
+
+user_option = click.option(
+    "--user", type=click.Choice(USERS), default="peter",
+    help="Vilken användare (default: peter)",
+)
 
 
 @click.group()
@@ -48,14 +67,15 @@ def cli():
 @cli.command()
 @click.option("--schedule", "schedule_path", default=None, help="Sökväg till schedule.json")
 @click.option("--dry-run", is_flag=True, help="Visa vad som skulle bokas utan att boka")
-def book(schedule_path, dry_run):
+@user_option
+def book(schedule_path, dry_run, user):
     """Boka schemalagda pass."""
-    username, password = get_credentials()
-    schedule = load_schedule(schedule_path)
+    username, password = get_credentials(user)
+    schedule = load_schedule(schedule_path or str(get_schedule_path(user)))
 
     client = BRPClient()
     client.login(username, password)
-    click.echo(f"Inloggad som {username}")
+    click.echo(f"Inloggad som {username} (användare: {user})")
 
     results = run_booking(client, schedule, dry_run=dry_run)
 
@@ -67,10 +87,11 @@ def book(schedule_path, dry_run):
 
 @cli.command("list")
 @click.option("--schedule", "schedule_path", default=None, help="Sökväg till schedule.json")
-def list_schedule(schedule_path):
+@user_option
+def list_schedule(schedule_path, user):
     """Visa konfigurerat schema."""
-    schedule = load_schedule(schedule_path)
-    click.echo("Konfigurerat schema:")
+    schedule = load_schedule(schedule_path or str(get_schedule_path(user)))
+    click.echo(f"Konfigurerat schema för {user}:")
     for entry in schedule:
         day = WEEKDAYS[entry["weekday"] - 1]
         time = entry.get("time", "—")
@@ -79,14 +100,15 @@ def list_schedule(schedule_path):
 
 @cli.command()
 @click.option("--schedule", "schedule_path", default=None, help="Sökväg till schedule.json")
-def check(schedule_path):
+@user_option
+def check(schedule_path, user):
     """Visa tillgängliga pass utan att boka."""
-    username, password = get_credentials()
-    schedule = load_schedule(schedule_path)
+    username, password = get_credentials(user)
+    schedule = load_schedule(schedule_path or str(get_schedule_path(user)))
 
     client = BRPClient()
     client.login(username, password)
-    click.echo(f"Inloggad som {username}")
+    click.echo(f"Inloggad som {username} (användare: {user})")
 
     results = run_booking(client, schedule, dry_run=True)
 
@@ -96,17 +118,15 @@ def check(schedule_path):
         click.echo(f"  {r['activity']} {r['time']} — {r['status']}")
 
 
-SCHEDULE_PATH = Path(__file__).resolve().parent.parent / "config" / "schedule.json"
-
-
-def save_and_push(schedule, push):
-    with open(SCHEDULE_PATH, "w") as f:
+def save_and_push(schedule, push, user):
+    schedule_path = get_schedule_path(user)
+    with open(schedule_path, "w") as f:
         json.dump(schedule, f, indent=2, ensure_ascii=False)
-    click.echo(f"\nSparat till {SCHEDULE_PATH}")
+    click.echo(f"\nSparat till {schedule_path}")
     if push:
         repo_root = Path(__file__).resolve().parent.parent
-        subprocess.run(["git", "add", "config/schedule.json"], cwd=repo_root)
-        subprocess.run(["git", "commit", "-m", "Uppdatera schema"], cwd=repo_root)
+        subprocess.run(["git", "add", f"config/{user}.json"], cwd=repo_root)
+        subprocess.run(["git", "commit", "-m", f"Uppdatera schema för {user}"], cwd=repo_root)
         subprocess.run(["git", "push"], cwd=repo_root)
         click.echo("Pushat till GitHub!")
 
@@ -168,13 +188,14 @@ def print_schedule(schedule, header="Nuvarande schema"):
 
 @cli.command()
 @click.option("--push/--no-push", default=True, help="Committa och pusha till GitHub")
-def add(push):
+@user_option
+def add(push, user):
     """Lägg till pass i schemat."""
-    username, password = get_credentials()
+    username, password = get_credentials(user)
     client = BRPClient()
     client.login(username, password)
 
-    current = load_schedule()
+    current = load_schedule(str(get_schedule_path(user)))
     current_set = {entry_key(e) for e in current}
 
     print_schedule(current)
@@ -216,20 +237,21 @@ def add(push):
 
     updated = current + to_add
     print_schedule(updated, "Uppdaterat schema")
-    save_and_push(updated, push)
+    save_and_push(updated, push, user)
 
 
 @cli.command()
 @click.option("--push/--no-push", default=True, help="Committa och pusha till GitHub")
-def remove(push):
+@user_option
+def remove(push, user):
     """Ta bort pass från schemat."""
-    current = load_schedule()
+    current = load_schedule(str(get_schedule_path(user)))
 
     if not current:
         click.echo("Schemat är tomt.")
         return
 
-    click.echo("\nNuvarande schema:\n")
+    click.echo(f"\nNuvarande schema för {user}:\n")
     sorted_schedule = sorted(current, key=lambda e: (e["weekday"], e.get("time", "")))
     for i, e in enumerate(sorted_schedule, 1):
         day = WEEKDAYS[e["weekday"] - 1]
@@ -256,4 +278,4 @@ def remove(push):
 
     updated = [e for i, e in enumerate(sorted_schedule) if i not in to_remove]
     print_schedule(updated, "Uppdaterat schema")
-    save_and_push(updated, push)
+    save_and_push(updated, push, user)

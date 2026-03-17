@@ -9,6 +9,9 @@ on:
 jobs:
   book:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        user: [peter, alexandra]
     steps:
       - uses: actions/checkout@v4
 
@@ -21,6 +24,11 @@ jobs:
 
       - name: Run booker
         env:
+          FRISKIS_USERNAME_PETER: ${{ secrets.FRISKIS_USERNAME_PETER }}
+          FRISKIS_PASSWORD_PETER: ${{ secrets.FRISKIS_PASSWORD_PETER }}
+          FRISKIS_USERNAME_ALEXANDRA: ${{ secrets.FRISKIS_USERNAME_ALEXANDRA }}
+          FRISKIS_PASSWORD_ALEXANDRA: ${{ secrets.FRISKIS_PASSWORD_ALEXANDRA }}
+          # Backwards compat fallback for Peter
           FRISKIS_USERNAME: ${{ secrets.FRISKIS_USERNAME }}
           FRISKIS_PASSWORD: ${{ secrets.FRISKIS_PASSWORD }}
-        run: python -m friskis_booker book
+        run: python -m friskis_booker book --user ${{ matrix.user }}
