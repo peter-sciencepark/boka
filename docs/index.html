@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Friskis Schema</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f5f5f5;
+      color: #333;
+      padding: 16px;
+    }
+    .container { max-width: 500px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; margin-bottom: 16px; text-align: center; }
+    h2 { font-size: 1.1rem; margin: 20px 0 8px; }
+
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    label { display: block; font-size: 0.85rem; color: #666; margin-bottom: 4px; }
+    input, select {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 1rem;
+      margin-bottom: 10px;
+      background: #fff;
+    }
+    input:focus, select:focus { outline: none; border-color: #4CAF50; }
+
+    .btn {
+      display: inline-block;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      cursor: pointer;
+      width: 100%;
+      text-align: center;
+    }
+    .btn-green { background: #4CAF50; color: #fff; }
+    .btn-green:hover { background: #43A047; }
+    .btn-green:disabled { background: #a5d6a7; cursor: default; }
+    .btn-red { background: #e53935; color: #fff; font-size: 0.85rem; padding: 6px 12px; width: auto; }
+    .btn-red:hover { background: #c62828; }
+    .btn-blue { background: #1976D2; color: #fff; }
+    .btn-blue:hover { background: #1565C0; }
+
+    .entry {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid #eee;
+    }
+    .entry:last-child { border-bottom: none; }
+    .entry-text { flex: 1; }
+    .entry-day { font-weight: 600; }
+    .entry-detail { font-size: 0.9rem; color: #555; }
+
+    .empty { color: #999; font-style: italic; padding: 12px 0; }
+
+    .toast {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      background: #333; color: #fff; padding: 10px 24px; border-radius: 8px;
+      font-size: 0.95rem; opacity: 0; transition: opacity 0.3s;
+      z-index: 10;
+    }
+    .toast.show { opacity: 1; }
+    .toast.error { background: #c62828; }
+
+    .user-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .user-tab {
+      flex: 1;
+      padding: 10px;
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      background: #fff;
+      font-size: 1rem;
+      cursor: pointer;
+      text-align: center;
+    }
+    .user-tab.active {
+      border-color: #4CAF50;
+      background: #E8F5E9;
+      font-weight: 600;
+    }
+
+    .save-bar {
+      position: sticky;
+      bottom: 0;
+      padding: 12px 0;
+      background: #f5f5f5;
+    }
+
+    .hidden { display: none; }
+
+    .spinner {
+      display: inline-block;
+      width: 18px; height: 18px;
+      border: 2px solid #fff;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Friskis Schema</h1>
+
+    <!-- PIN-inloggning -->
+    <div id="auth-section" class="card">
+      <label for="pin-input">PIN-kod</label>
+      <input type="password" id="pin-input" placeholder="Ange PIN-kod" inputmode="numeric">
+      <button class="btn btn-green" onclick="authenticate()">Logga in</button>
+    </div>
+
+    <!-- Huvudinnehåll (dolt tills autentiserad) -->
+    <div id="main-section" class="hidden">
+
+      <!-- Användarval -->
+      <div class="user-tabs">
+        <button class="user-tab active" data-user="alexandra" onclick="switchUser('alexandra')">Alexandra</button>
+        <button class="user-tab" data-user="peter" onclick="switchUser('peter')">Peter</button>
+      </div>
+
+      <!-- Schema -->
+      <div class="card">
+        <h2>Dina pass</h2>
+        <div id="schedule-list"></div>
+      </div>
+
+      <!-- Lägg till -->
+      <div class="card">
+        <h2>Lägg till pass</h2>
+        <label for="add-day">Veckodag</label>
+        <select id="add-day">
+          <option value="1">Måndag</option>
+          <option value="2">Tisdag</option>
+          <option value="3">Onsdag</option>
+          <option value="4">Torsdag</option>
+          <option value="5">Fredag</option>
+          <option value="6">Lördag</option>
+          <option value="7">Söndag</option>
+        </select>
+
+        <label for="add-activity">Aktivitet</label>
+        <select id="add-activity">
+          <option>Cirkelfys</option>
+          <option>HYROX HIT</option>
+          <option>HYROX Cirkel</option>
+          <option>Skivstång</option>
+          <option>SkivstångIntervall</option>
+          <option>Multifys skivstång</option>
+        </select>
+
+        <label for="add-time">Tid</label>
+        <input type="time" id="add-time" value="17:30">
+
+        <label for="add-location">Plats</label>
+        <select id="add-location">
+          <option>Jönköping - City</option>
+          <option>Jönköping - Skeppsbron</option>
+        </select>
+
+        <button class="btn btn-blue" onclick="addEntry()">Lägg till</button>
+      </div>
+
+      <!-- Spara -->
+      <div class="save-bar">
+        <button id="save-btn" class="btn btn-green" onclick="saveSchedule()" disabled>Spara ändringar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    // WORKER_URL sätts efter deploy
+    const WORKER_URL = "https://friskis-schedule.peter-schon1974.workers.dev";
+
+    const WEEKDAYS = ["Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag", "Lördag", "Söndag"];
+
+    let pin = localStorage.getItem("friskis-pin") || "";
+    let currentUser = "alexandra";
+    let schedule = [];
+    let sha = "";
+    let dirty = false;
+
+    // Återställ sparad PIN
+    if (pin) {
+      document.getElementById("pin-input").value = pin;
+    }
+
+    function showToast(msg, isError) {
+      const t = document.getElementById("toast");
+      t.textContent = msg;
+      t.className = "toast show" + (isError ? " error" : "");
+      setTimeout(() => t.className = "toast", 3000);
+    }
+
+    async function authenticate() {
+      pin = document.getElementById("pin-input").value.trim();
+      if (!pin) { showToast("Ange en PIN-kod", true); return; }
+
+      try {
+        const res = await fetch(`${WORKER_URL}/schedule?user=${currentUser}`, {
+          headers: { "X-Pin": pin },
+        });
+        if (res.status === 401) {
+          showToast("Fel PIN-kod", true);
+          return;
+        }
+        if (!res.ok) throw new Error("Serverfel");
+
+        localStorage.setItem("friskis-pin", pin);
+        const data = await res.json();
+        schedule = data.schedule;
+        sha = data.sha;
+        dirty = false;
+
+        document.getElementById("auth-section").classList.add("hidden");
+        document.getElementById("main-section").classList.remove("hidden");
+        render();
+      } catch (e) {
+        showToast("Kunde inte ansluta: " + e.message, true);
+      }
+    }
+
+    async function switchUser(user) {
+      if (dirty && !confirm("Du har osparade ändringar. Vill du byta användare ändå?")) return;
+
+      currentUser = user;
+      document.querySelectorAll(".user-tab").forEach(t =>
+        t.classList.toggle("active", t.dataset.user === user)
+      );
+
+      try {
+        const res = await fetch(`${WORKER_URL}/schedule?user=${user}`, {
+          headers: { "X-Pin": pin },
+        });
+        if (!res.ok) throw new Error("Kunde inte hämta schema");
+        const data = await res.json();
+        schedule = data.schedule;
+        sha = data.sha;
+        dirty = false;
+        render();
+      } catch (e) {
+        showToast(e.message, true);
+      }
+    }
+
+    function render() {
+      const list = document.getElementById("schedule-list");
+      const sorted = [...schedule].sort((a, b) =>
+        a.weekday - b.weekday || (a.time || "").localeCompare(b.time || "")
+      );
+
+      if (sorted.length === 0) {
+        list.innerHTML = '<p class="empty">Inga pass i schemat</p>';
+      } else {
+        list.innerHTML = sorted.map((e, i) => {
+          const idx = schedule.indexOf(e);
+          return `<div class="entry">
+            <div class="entry-text">
+              <span class="entry-day">${WEEKDAYS[e.weekday - 1]}</span>
+              <span class="entry-detail">${e.time} — ${e.name} (${e.location})</span>
+            </div>
+            <button class="btn btn-red" onclick="removeEntry(${idx})">Ta bort</button>
+          </div>`;
+        }).join("");
+      }
+
+      document.getElementById("save-btn").disabled = !dirty;
+      document.getElementById("save-btn").textContent = dirty ? "Spara ändringar" : "Sparat";
+    }
+
+    function addEntry() {
+      const weekday = parseInt(document.getElementById("add-day").value);
+      const name = document.getElementById("add-activity").value;
+      const time = document.getElementById("add-time").value;
+      const location = document.getElementById("add-location").value;
+
+      if (!time) { showToast("Ange en tid", true); return; }
+
+      // Kolla om passet redan finns
+      const exists = schedule.some(e =>
+        e.weekday === weekday && e.name === name && e.time === time && e.location === location
+      );
+      if (exists) { showToast("Passet finns redan i schemat", true); return; }
+
+      schedule.push({ weekday, name, time, location });
+      dirty = true;
+      render();
+      showToast("Pass tillagt — kom ihåg att spara!");
+    }
+
+    function removeEntry(idx) {
+      schedule.splice(idx, 1);
+      dirty = true;
+      render();
+    }
+
+    async function saveSchedule() {
+      const btn = document.getElementById("save-btn");
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>Sparar...';
+
+      try {
+        const res = await fetch(`${WORKER_URL}/schedule?user=${currentUser}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Pin": pin,
+          },
+          body: JSON.stringify({ schedule, sha }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          if (res.status === 409) {
+            showToast(data.error, true);
+            await switchUser(currentUser);
+            return;
+          }
+          throw new Error(data.error || "Okänt fel");
+        }
+
+        sha = data.sha;
+        dirty = false;
+        render();
+        showToast("Schema sparat!");
+      } catch (e) {
+        showToast("Kunde inte spara: " + e.message, true);
+        btn.disabled = false;
+        btn.textContent = "Spara ändringar";
+      }
+    }
+
+    // Enter-tangent på PIN-fältet
+    document.getElementById("pin-input").addEventListener("keydown", e => {
+      if (e.key === "Enter") authenticate();
+    });
+  </script>
+</body>
+</html>
