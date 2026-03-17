@@ -51,8 +51,8 @@
     .btn-green:disabled { background: #a5d6a7; cursor: default; }
     .btn-red { background: #e53935; color: #fff; font-size: 0.85rem; padding: 6px 12px; width: auto; }
     .btn-red:hover { background: #c62828; }
-    .btn-blue { background: #1976D2; color: #fff; }
-    .btn-blue:hover { background: #1565C0; }
+    .btn-add { background: #1976D2; color: #fff; font-size: 0.85rem; padding: 6px 12px; width: auto; }
+    .btn-add:hover { background: #1565C0; }
 
     .entry {
       display: flex;
@@ -118,6 +118,25 @@
       margin-right: 6px;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    .day-group { margin-bottom: 12px; }
+    .day-group-title {
+      font-weight: 600;
+      font-size: 0.95rem;
+      padding: 6px 0;
+      border-bottom: 2px solid #4CAF50;
+      margin-bottom: 4px;
+    }
+    .activity-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .activity-row:last-child { border-bottom: none; }
+    .activity-info { flex: 1; font-size: 0.9rem; }
+    .activity-already { color: #a5d6a7; font-size: 0.8rem; margin-left: 8px; }
   </style>
 </head>
 <body>
@@ -131,10 +150,10 @@
       <button class="btn btn-green" onclick="authenticate()">Logga in</button>
     </div>
 
-    <!-- Huvudinnehåll (dolt tills autentiserad) -->
+    <!-- Huvudinnehall (dolt tills autentiserad) -->
     <div id="main-section" class="hidden">
 
-      <!-- Användarval -->
+      <!-- Användårval -->
       <div class="user-tabs">
         <button class="user-tab active" data-user="alexandra" onclick="switchUser('alexandra')">Alexandra</button>
         <button class="user-tab" data-user="peter" onclick="switchUser('peter')">Peter</button>
@@ -146,40 +165,11 @@
         <div id="schedule-list"></div>
       </div>
 
-      <!-- Lägg till -->
+      <!-- Lägg till fran tillgängliga pass -->
       <div class="card">
-        <h2>Lägg till pass</h2>
-        <label for="add-day">Veckodag</label>
-        <select id="add-day">
-          <option value="1">Måndag</option>
-          <option value="2">Tisdag</option>
-          <option value="3">Onsdag</option>
-          <option value="4">Torsdag</option>
-          <option value="5">Fredag</option>
-          <option value="6">Lördag</option>
-          <option value="7">Söndag</option>
-        </select>
-
-        <label for="add-activity">Aktivitet</label>
-        <select id="add-activity">
-          <option>Cirkelfys</option>
-          <option>HYROX HIT</option>
-          <option>HYROX Cirkel</option>
-          <option>Skivstång</option>
-          <option>SkivstångIntervall</option>
-          <option>Multifys skivstång</option>
-        </select>
-
-        <label for="add-time">Tid</label>
-        <input type="time" id="add-time" value="17:30">
-
-        <label for="add-location">Plats</label>
-        <select id="add-location">
-          <option>Jönköping - City</option>
-          <option>Jönköping - Skeppsbron</option>
-        </select>
-
-        <button class="btn btn-blue" onclick="addEntry()">Lägg till</button>
+        <h2>Tillgängliga pass</h2>
+        <p id="activities-status" class="empty">Laddar...</p>
+        <div id="activities-list"></div>
       </div>
 
       <!-- Spara -->
@@ -192,9 +182,7 @@
   <div id="toast" class="toast"></div>
 
   <script>
-    // WORKER_URL sätts efter deploy
     const WORKER_URL = "https://friskis-schedule.peter-schon1974.workers.dev";
-
     const WEEKDAYS = ["Måndag", "Tisdag", "Onsdag", "Torsdag", "Fredag", "Lördag", "Söndag"];
 
     let pin = localStorage.getItem("friskis-pin") || "";
@@ -202,8 +190,8 @@
     let schedule = [];
     let sha = "";
     let dirty = false;
+    let availableActivities = [];
 
-    // Återställ sparad PIN
     if (pin) {
       document.getElementById("pin-input").value = pin;
     }
@@ -213,6 +201,10 @@
       t.textContent = msg;
       t.className = "toast show" + (isError ? " error" : "");
       setTimeout(() => t.className = "toast", 3000);
+    }
+
+    function entryKey(e) {
+      return `${e.weekday}|${e.name.toLowerCase()}|${e.time}|${(e.location || "").toLowerCase()}`;
     }
 
     async function authenticate() {
@@ -238,8 +230,24 @@
         document.getElementById("auth-section").classList.add("hidden");
         document.getElementById("main-section").classList.remove("hidden");
         render();
+        loadActivities();
       } catch (e) {
         showToast("Kunde inte ansluta: " + e.message, true);
+      }
+    }
+
+    async function loadActivities() {
+      try {
+        const res = await fetch(`${WORKER_URL}/activities`, {
+          headers: { "X-Pin": pin },
+        });
+        if (!res.ok) throw new Error("Kunde inte hämta pass");
+        const data = await res.json();
+        availableActivities = data.activities || [];
+        renderActivities();
+      } catch (e) {
+        document.getElementById("activities-status").textContent =
+          "Kunde inte ladda tillgängliga pass. Prova igen senare.";
       }
     }
 
@@ -261,6 +269,7 @@
         sha = data.sha;
         dirty = false;
         render();
+        renderActivities();
       } catch (e) {
         showToast(e.message, true);
       }
@@ -275,7 +284,7 @@
       if (sorted.length === 0) {
         list.innerHTML = '<p class="empty">Inga pass i schemat</p>';
       } else {
-        list.innerHTML = sorted.map((e, i) => {
+        list.innerHTML = sorted.map((e) => {
           const idx = schedule.indexOf(e);
           return `<div class="entry">
             <div class="entry-text">
@@ -291,23 +300,64 @@
       document.getElementById("save-btn").textContent = dirty ? "Spara ändringar" : "Sparat";
     }
 
-    function addEntry() {
-      const weekday = parseInt(document.getElementById("add-day").value);
-      const name = document.getElementById("add-activity").value;
-      const time = document.getElementById("add-time").value;
-      const location = document.getElementById("add-location").value;
+    function renderActivities() {
+      const container = document.getElementById("activities-list");
+      const status = document.getElementById("activities-status");
 
-      if (!time) { showToast("Ange en tid", true); return; }
+      if (availableActivities.length === 0) {
+        status.textContent = "Inga tillgängliga pass just nu.";
+        status.classList.remove("hidden");
+        container.innerHTML = "";
+        return;
+      }
 
-      // Kolla om passet redan finns
-      const exists = schedule.some(e =>
-        e.weekday === weekday && e.name === name && e.time === time && e.location === location
-      );
-      if (exists) { showToast("Passet finns redan i schemat", true); return; }
+      status.classList.add("hidden");
 
-      schedule.push({ weekday, name, time, location });
+      const scheduleKeys = new Set(schedule.map(entryKey));
+
+      // Group by weekday
+      const byDay = {};
+      for (const a of availableActivities) {
+        if (!byDay[a.weekday]) byDay[a.weekday] = [];
+        byDay[a.weekday].push(a);
+      }
+
+      let html = "";
+      for (const day of Object.keys(byDay).sort((a, b) => a - b)) {
+        const entries = byDay[day].sort((a, b) => a.time.localeCompare(b.time));
+        html += `<div class="day-group">`;
+        html += `<div class="day-group-title">${WEEKDAYS[day - 1]}</div>`;
+        for (const a of entries) {
+          const alreadyAdded = scheduleKeys.has(entryKey(a));
+          const aJson = JSON.stringify(a).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+          html += `<div class="activity-row">
+            <span class="activity-info">${a.time} — ${a.name} (${a.location})</span>
+            ${alreadyAdded
+              ? '<span class="activity-already">Tillagd</span>'
+              : `<button class="btn btn-add" onclick='addActivity(${aJson})'>Lägg till</button>`
+            }
+          </div>`;
+        }
+        html += `</div>`;
+      }
+      container.innerHTML = html;
+    }
+
+    function addActivity(activity) {
+      const exists = schedule.some(e => entryKey(e) === entryKey(activity));
+      if (exists) {
+        showToast("Passet finns redan i schemat", true);
+        return;
+      }
+      schedule.push({
+        weekday: activity.weekday,
+        name: activity.name,
+        time: activity.time,
+        location: activity.location,
+      });
       dirty = true;
       render();
+      renderActivities();
       showToast("Pass tillagt — kom ihåg att spara!");
     }
 
@@ -315,6 +365,7 @@
       schedule.splice(idx, 1);
       dirty = true;
       render();
+      renderActivities();
     }
 
     async function saveSchedule() {
@@ -353,7 +404,6 @@
       }
     }
 
-    // Enter-tangent på PIN-fältet
     document.getElementById("pin-input").addEventListener("keydown", e => {
       if (e.key === "Enter") authenticate();
     });

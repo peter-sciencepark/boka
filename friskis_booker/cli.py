@@ -279,3 +279,27 @@ def remove(push, user):
     updated = [e for i, e in enumerate(sorted_schedule) if i not in to_remove]
     print_schedule(updated, "Uppdaterat schema")
     save_and_push(updated, push, user)
+
+
+@cli.command("dump-activities")
+@click.option("--push/--no-push", default=True, help="Committa och pusha till GitHub")
+def dump_activities(push):
+    """Hämta tillgängliga pass och spara till config/activities.json."""
+    username, password = get_credentials("peter")
+    client = BRPClient()
+    client.login(username, password)
+
+    click.echo("Hämtar tillgängliga pass...")
+    activities = fetch_available_activities(client)
+
+    activities_path = CONFIG_DIR / "activities.json"
+    with open(activities_path, "w") as f:
+        json.dump(activities, f, indent=2, ensure_ascii=False)
+    click.echo(f"Sparade {len(activities)} pass till {activities_path}")
+
+    if push:
+        repo_root = Path(__file__).resolve().parent.parent
+        subprocess.run(["git", "add", "config/activities.json"], cwd=repo_root)
+        subprocess.run(["git", "commit", "-m", "Uppdatera tillgängliga pass"], cwd=repo_root)
+        subprocess.run(["git", "push"], cwd=repo_root)
+        click.echo("Pushat till GitHub!")

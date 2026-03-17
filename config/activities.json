@@ -1,0 +1,182 @@
+[
+  {
+    "weekday": 1,
+    "name": "Skivstång",
+    "time": "06:30",
+    "location": "Jönköping - City"
+  },
+  {
+    "weekday": 1,
+    "name": "HYROX HIT",
+    "time": "11:45",
+    "location": "Jönköping - City"
+  },
+  {
+    "weekday": 1,
+    "name": "SkivstångIntervall",
+    "time": "17:15",
+    "location": "Jönköping - City"
+  },
+  {
+    "weekday": 1,
+    "name": "SkivstångIntervall",
+    "time": "17:55",
+    "location": "Jönköping - Skeppsbron"
+  },
+  {
+    "weekday": 1,
+    "name": "Cirkelfys",
+    "time": "18:30",
+    "location": "Jönköping - City"
+  },
+  {
+    "weekday": 2,
+    "name": "HYROX Cirkel",
+    "time": "11:45",
+    "location": "Jönköping - City"
+  },
+  {
+    "weekday": 2,
+    "name": "Skivstång",
+    "time": "11:45",
+    "location": "Jönköping - City"
+  },
+  {
+    "weekday": 2,
+    "name": "Skivstång",
+    "time": "16:00",
+    "location": "Jönköping - City"
+  },
+  {
+    "weekday": 2,
+    "name": "Cirkelfys",
+    "time": "16:30",
+    "location": "Jönköping - Skeppsbron"
+  },
+  {
+    "weekday": 2,
+    "name": "HYROX HIT",
+    "time": "17:30",
+    "location": "Jönköping - City"
+  },
+  {
+    "weekday": 2,
+    "name": "SkivstångIntervall",
+    "time": "18:00",
+    "location": "Jönköping - City"
+  },
+  {
+    "weekday": 3,
+    "name": "HYROX HIT",
+    "time": "06:30",
+    "location": "Jönköping - City"
+  },
+  {
+    "weekday": 3,
+    "name": "Skivstång",
+    "time": "06:30",
+    "location": "Jönköping - Skeppsbron"
+  },
+  {
+    "weekday": 3,
+    "name": "Cirkelfys soft",
+    "time": "09:30",
+    "location": "Jönköping - City"
+  },
+  {
+    "weekday": 3,
+    "name": "HYROX HIT",
+    "time": "11:45",
+    "location": "Jönköping - City"
+  },
+  {
+    "weekday": 3,
+    "name": "Cirkelfys soft",
+    "time": "14:30",
+    "location": "Jönköping - City"
+  },
+  {
+    "weekday": 3,
+    "name": "HYROX Cirkel",
+    "time": "18:00",
+    "location": "Jönköping - City"
+  },
+  {
+    "weekday": 4,
+    "name": "Skivstång",
+    "time": "11:45",
+    "location": "Jönköping - City"
+  },
+  {
+    "weekday": 4,
+    "name": "Skivstång",
+    "time": "17:30",
+    "location": "Jönköping - Skeppsbron"
+  },
+  {
+    "weekday": 4,
+    "name": "HYROX HIT",
+    "time": "18:30",
+    "location": "Jönköping - City"
+  },
+  {
+    "weekday": 5,
+    "name": "Cirkelfys",
+    "time": "11:45",
+    "location": "Jönköping - City"
+  },
+  {
+    "weekday": 5,
+    "name": "Skivstång",
+    "time": "15:00",
+    "location": "Jönköping - City"
+  },
+  {
+    "weekday": 5,
+    "name": "HYROX HIT",
+    "time": "15:30",
+    "location": "Jönköping - City"
+  },
+  {
+    "weekday": 5,
+    "name": "Skivstång",
+    "time": "16:30",
+    "location": "Jönköping - Skeppsbron"
+  },
+  {
+    "weekday": 6,
+    "name": "SkivstångIntervall",
+    "time": "09:30",
+    "location": "Jönköping - City"
+  },
+  {
+    "weekday": 6,
+    "name": "Cirkelfys",
+    "time": "12:00",
+    "location": "Jönköping - City"
+  },
+  {
+    "weekday": 7,
+    "name": "Skivstång",
+    "time": "10:00",
+    "location": "Jönköping - City"
+  },
+  {
+    "weekday": 7,
+    "name": "Multifys skivstång",
+    "time": "16:30",
+    "location": "Jönköping - City"
+  },
+  {
+    "weekday": 7,
+    "name": "SkivstångIntervall",
+    "time": "16:30",
+    "location": "Jönköping - Skeppsbron"
+  },
+  {
+    "weekday": 7,
+    "name": "SkivstångIntervall",
+    "time": "18:30",
+    "location": "Jönköping - City"
+  }
+]
