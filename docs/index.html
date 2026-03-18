@@ -119,6 +119,33 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    .booking-row {
+      padding: 8px 0;
+      border-bottom: 1px solid #eee;
+      font-size: 0.9rem;
+    }
+    .booking-row:last-child { border-bottom: none; }
+    .booking-date { font-weight: 600; }
+    .booking-detail { color: #555; }
+    .booking-waiting {
+      display: inline-block;
+      background: #FFF3E0;
+      color: #E65100;
+      font-size: 0.75rem;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-left: 6px;
+    }
+    .booking-confirmed {
+      display: inline-block;
+      background: #E8F5E9;
+      color: #2E7D32;
+      font-size: 0.75rem;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-left: 6px;
+    }
+
     .day-group { margin-bottom: 12px; }
     .day-group-title {
       font-weight: 600;
@@ -159,9 +186,15 @@
         <button class="user-tab" data-user="peter" onclick="switchUser('peter')">Peter</button>
       </div>
 
+      <!-- Bokade pass -->
+      <div class="card">
+        <h2>Bokade pass</h2>
+        <div id="bookings-list"><p class="empty">Laddar...</p></div>
+      </div>
+
       <!-- Schema -->
       <div class="card">
-        <h2>Dina pass</h2>
+        <h2>Ditt schema</h2>
         <div id="schedule-list"></div>
       </div>
 
@@ -191,6 +224,7 @@
     let sha = "";
     let dirty = false;
     let availableActivities = [];
+    let bookings = [];
 
     if (pin) {
       document.getElementById("pin-input").value = pin;
@@ -230,10 +264,45 @@
         document.getElementById("auth-section").classList.add("hidden");
         document.getElementById("main-section").classList.remove("hidden");
         render();
+        loadBookings();
         loadActivities();
       } catch (e) {
         showToast("Kunde inte ansluta: " + e.message, true);
       }
+    }
+
+    async function loadBookings() {
+      try {
+        const res = await fetch(`${WORKER_URL}/bookings?user=${currentUser}`, {
+          headers: { "X-Pin": pin },
+        });
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        bookings = data.bookings || [];
+        renderBookings();
+      } catch (e) {
+        document.getElementById("bookings-list").innerHTML =
+          '<p class="empty">Kunde inte ladda bokningar.</p>';
+      }
+    }
+
+    function renderBookings() {
+      const container = document.getElementById("bookings-list");
+      if (bookings.length === 0) {
+        container.innerHTML = '<p class="empty">Inga bokade pass just nu</p>';
+        return;
+      }
+      container.innerHTML = bookings.map(b => {
+        const dayName = WEEKDAYS[b.weekday - 1];
+        const status = b.waitingList != null
+          ? `<span class="booking-waiting">Väntelista #${b.waitingList}</span>`
+          : '<span class="booking-confirmed">Bokad</span>';
+        return `<div class="booking-row">
+          <span class="booking-date">${dayName} ${b.date}</span>
+          <span class="booking-detail">${b.time} — ${b.name}</span>
+          ${status}
+        </div>`;
+      }).join("");
     }
 
     async function loadActivities() {
@@ -269,6 +338,7 @@
         sha = data.sha;
         dirty = false;
         render();
+        loadBookings();
         renderActivities();
       } catch (e) {
         showToast(e.message, true);

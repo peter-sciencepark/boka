@@ -1,0 +1,34 @@
+[
+  {
+    "name": "Cirkelfys",
+    "date": "2026-03-23",
+    "weekday": 1,
+    "time": "18:30",
+    "location": "Jönköping - City",
+    "waitingList": null
+  },
+  {
+    "name": "HYROX HIT",
+    "date": "2026-03-24",
+    "weekday": 2,
+    "time": "17:30",
+    "location": "Jönköping - City",
+    "waitingList": 13
+  },
+  {
+    "name": "SkivstångIntervall",
+    "date": "2026-03-24",
+    "weekday": 2,
+    "time": "18:00",
+    "location": "Jönköping - City",
+    "waitingList": null
+  },
+  {
+    "name": "HYROX HIT",
+    "date": "2026-03-25",
+    "weekday": 3,
+    "time": "06:30",
+    "location": "Jönköping - City",
+    "waitingList": null
+  }
+]

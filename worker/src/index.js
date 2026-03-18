@@ -60,6 +60,23 @@ export default {
       return json({ activities }, 200, origin);
     }
 
+    // GET /bookings?user=xxx — return booked activities
+    if (path === "/bookings" && request.method === "GET") {
+      const user = url.searchParams.get("user");
+      if (!user || !ALLOWED_USERS.includes(user)) {
+        return json({ error: "Ogiltig användare" }, 400, origin);
+      }
+      const githubUrl = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/config/bookings-${user}.json`;
+      const res = await fetch(githubUrl, { headers: githubHeaders });
+      if (!res.ok) {
+        return json({ bookings: [] }, 200, origin);
+      }
+      const data = await res.json();
+      const content = decodeGithubContent(data.content);
+      const bookings = JSON.parse(content);
+      return json({ bookings }, 200, origin);
+    }
+
     // /schedule endpoints
     if (path === "/schedule") {
       const user = url.searchParams.get("user");

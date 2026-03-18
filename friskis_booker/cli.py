@@ -303,3 +303,54 @@ def dump_activities(push):
         subprocess.run(["git", "commit", "-m", "Uppdatera tillgängliga pass"], cwd=repo_root)
         subprocess.run(["git", "push"], cwd=repo_root)
         click.echo("Pushat till GitHub!")
+
+
+@cli.command("dump-bookings")
+@user_option
+@click.option("--push/--no-push", default=True, help="Committa och pusha till GitHub")
+def dump_bookings(user, push):
+    """Hämta bokade pass och spara till config/bookings-{user}.json."""
+    username, password = get_credentials(user)
+    client = BRPClient()
+    client.login(username, password)
+
+    click.echo(f"Hämtar bokade pass för {user}...")
+    raw_bookings = client.get_bookings()
+
+    bookings = []
+    for b in raw_bookings:
+        ga = b.get("groupActivity")
+        if not ga or not isinstance(ga, dict):
+            continue
+        start_str = b.get("duration", {}).get("start", "")
+        if not start_str:
+            continue
+        dt = parse_dt(start_str).astimezone(TZ)
+        name = ga.get("name", "?")
+        location = b.get("businessUnit", {}).get("name", "")
+        booking_type = b.get("type", "")
+        waiting_pos = None
+        if booking_type == "waitingListBooking":
+            waiting_pos = b.get("waitingListBooking", {}).get("waitingListPosition")
+        bookings.append({
+            "name": name,
+            "date": dt.strftime("%Y-%m-%d"),
+            "weekday": dt.isoweekday(),
+            "time": dt.strftime("%H:%M"),
+            "location": location,
+            "waitingList": waiting_pos,
+        })
+
+    bookings.sort(key=lambda b: (b["date"], b["time"]))
+
+    bookings_path = CONFIG_DIR / f"bookings-{user}.json"
+    with open(bookings_path, "w") as f:
+        json.dump(bookings, f, indent=2, ensure_ascii=False)
+    click.echo(f"Sparade {len(bookings)} bokningar till {bookings_path}")
+
+    if push:
+        repo_root = Path(__file__).resolve().parent.parent
+        subprocess.run(["git", "add", f"config/bookings-{user}.json"], cwd=repo_root)
+        subprocess.run(["git", "commit", "-m", f"Uppdatera bokningar för {user}"], cwd=repo_root)
+        subprocess.run(["git", "push"], cwd=repo_root)
+        click.echo("Pushat till GitHub!")

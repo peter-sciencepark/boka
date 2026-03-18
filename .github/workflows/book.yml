@@ -7,7 +7,7 @@ on:
   workflow_dispatch: {}
 
 jobs:
-  update-activities:
+  update-data:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,16 +27,31 @@ jobs:
           FRISKIS_PASSWORD: ${{ secrets.FRISKIS_PASSWORD }}
         run: python -m friskis_booker dump-activities --no-push
 
-      - name: Commit activities if changed
+      - name: Dump bookings for Peter
+        env:
+          FRISKIS_USERNAME_PETER: ${{ secrets.FRISKIS_USERNAME_PETER }}
+          FRISKIS_PASSWORD_PETER: ${{ secrets.FRISKIS_PASSWORD_PETER }}
+          FRISKIS_USERNAME: ${{ secrets.FRISKIS_USERNAME }}
+          FRISKIS_PASSWORD: ${{ secrets.FRISKIS_PASSWORD }}
+        run: python -m friskis_booker dump-bookings --user peter --no-push
+
+      - name: Dump bookings for Alexandra
+        env:
+          FRISKIS_USERNAME_ALEXANDRA: ${{ secrets.FRISKIS_USERNAME_ALEXANDRA }}
+          FRISKIS_PASSWORD_ALEXANDRA: ${{ secrets.FRISKIS_PASSWORD_ALEXANDRA }}
+        run: python -m friskis_booker dump-bookings --user alexandra --no-push
+        continue-on-error: true
+
+      - name: Commit data if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add config/activities.json
-          git diff --cached --quiet || (git commit -m "Uppdatera tillgängliga pass" && git push)
+          git add config/activities.json config/bookings-*.json
+          git diff --cached --quiet || (git commit -m "Uppdatera pass och bokningar" && git push)
 
   book:
     runs-on: ubuntu-latest
-    needs: update-activities
+    needs: update-data
     strategy:
       matrix:
         user: [peter, alexandra]
