@@ -30,5 +30,13 @@
     "time": "16:30",
     "location": "Jönköping - City",
     "waitingList": null
+  },
+  {
+    "name": "Cirkelfys",
+    "date": "2026-03-30",
+    "weekday": 1,
+    "time": "18:30",
+    "location": "Jönköping - City",
+    "waitingList": null
   }
 ]
