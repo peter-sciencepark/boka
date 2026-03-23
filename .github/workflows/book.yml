@@ -6,9 +6,6 @@ on:
     - cron: '*/30 15-19 * * *'   # Var 30:e min, 16-20 CET (15-19 UTC)
   workflow_dispatch: {}
 
-permissions:
-  contents: write
-
 jobs:
   update-data:
     runs-on: ubuntu-latest
@@ -22,13 +19,15 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Dump available activities
+      - name: Dump activities to KV
         env:
           FRISKIS_USERNAME_PETER: ${{ secrets.FRISKIS_USERNAME_PETER }}
           FRISKIS_PASSWORD_PETER: ${{ secrets.FRISKIS_PASSWORD_PETER }}
           FRISKIS_USERNAME: ${{ secrets.FRISKIS_USERNAME }}
           FRISKIS_PASSWORD: ${{ secrets.FRISKIS_PASSWORD }}
-        run: python -m friskis_booker dump-activities --no-push
+          WORKER_URL: ${{ secrets.WORKER_URL }}
+          WORKER_PIN: ${{ secrets.WORKER_PIN }}
+        run: python -m friskis_booker dump-activities
 
       - name: Dump bookings for Peter
         env:
@@ -36,21 +35,18 @@ jobs:
           FRISKIS_PASSWORD_PETER: ${{ secrets.FRISKIS_PASSWORD_PETER }}
           FRISKIS_USERNAME: ${{ secrets.FRISKIS_USERNAME }}
           FRISKIS_PASSWORD: ${{ secrets.FRISKIS_PASSWORD }}
-        run: python -m friskis_booker dump-bookings --user peter --no-push
+          WORKER_URL: ${{ secrets.WORKER_URL }}
+          WORKER_PIN: ${{ secrets.WORKER_PIN }}
+        run: python -m friskis_booker dump-bookings --user peter
 
       - name: Dump bookings for Alexandra
         env:
           FRISKIS_USERNAME_ALEXANDRA: ${{ secrets.FRISKIS_USERNAME_ALEXANDRA }}
           FRISKIS_PASSWORD_ALEXANDRA: ${{ secrets.FRISKIS_PASSWORD_ALEXANDRA }}
-        run: python -m friskis_booker dump-bookings --user alexandra --no-push
+          WORKER_URL: ${{ secrets.WORKER_URL }}
+          WORKER_PIN: ${{ secrets.WORKER_PIN }}
+        run: python -m friskis_booker dump-bookings --user alexandra
         continue-on-error: true
-
-      - name: Commit data if changed
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add config/activities.json config/bookings-*.json
-          git diff --cached --quiet || (git commit -m "Uppdatera pass och bokningar" && git push)
 
   book:
     runs-on: ubuntu-latest
@@ -61,8 +57,6 @@ jobs:
         user: [peter, alexandra]
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: main
 
       - uses: actions/setup-python@v5
         with:
@@ -87,7 +81,6 @@ jobs:
           P_VAR="FRISKIS_PASSWORD_${SUFFIX}"
           U_VAL="${!U_VAR}"
           P_VAL="${!P_VAR}"
-          # Fallback for peter
           if [ "$USER" = "peter" ] && [ -z "$U_VAL" ]; then U_VAL="$FRISKIS_USERNAME"; fi
           if [ "$USER" = "peter" ] && [ -z "$P_VAL" ]; then P_VAL="$FRISKIS_PASSWORD"; fi
           if [ -z "$U_VAL" ] || [ -z "$P_VAL" ]; then
@@ -108,4 +101,6 @@ jobs:
           FRISKIS_PASSWORD_ALEXANDRA: ${{ secrets.FRISKIS_PASSWORD_ALEXANDRA }}
           FRISKIS_USERNAME: ${{ secrets.FRISKIS_USERNAME }}
           FRISKIS_PASSWORD: ${{ secrets.FRISKIS_PASSWORD }}
+          WORKER_URL: ${{ secrets.WORKER_URL }}
+          WORKER_PIN: ${{ secrets.WORKER_PIN }}
         run: python -m friskis_booker book --user ${{ matrix.user }}

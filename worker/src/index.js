@@ -1,5 +1,3 @@
-const REPO_OWNER = "peter-sciencepark";
-const REPO_NAME = "boka";
 const ALLOWED_USERS = ["peter", "alexandra"];
 const ALLOWED_ORIGIN = "https://peter-sciencepark.github.io";
 
@@ -22,17 +20,10 @@ function json(data, status = 200, origin = "") {
   });
 }
 
-function decodeGithubContent(base64Content) {
-  const raw = atob(base64Content.replace(/\n/g, ""));
-  const bytes = Uint8Array.from(raw, c => c.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
-}
-
 async function checkRateLimit(ip, kv) {
   const key = `fail:${ip}`;
   const val = await kv.get(key);
-  const failures = val ? parseInt(val, 10) : 0;
-  return failures >= MAX_FAILURES;
+  return val ? parseInt(val, 10) >= MAX_FAILURES : false;
 }
 
 async function recordFailure(ip, kv) {
@@ -58,7 +49,7 @@ export default {
     const path = url.pathname;
     const ip = request.headers.get("CF-Connecting-IP") || "unknown";
 
-    // Rate limit check — before PIN auth
+    // Rate limit check
     const blocked = await checkRateLimit(ip, env.RATE_LIMIT);
     if (blocked) {
       return json({ error: "För många misslyckade försök. Vänta 15 minuter." }, 429, origin);
@@ -70,97 +61,71 @@ export default {
       await recordFailure(ip, env.RATE_LIMIT);
       return json({ error: "Fel PIN-kod" }, 401, origin);
     }
-
-    // Successful auth — clear any previous failures
     await clearFailures(ip, env.RATE_LIMIT);
-
-    const githubHeaders = {
-      Authorization: `token ${env.GITHUB_PAT}`,
-      Accept: "application/vnd.github.v3+json",
-      "User-Agent": "friskis-schedule-worker",
-    };
 
     // GET /activities
     if (path === "/activities" && request.method === "GET") {
-      const githubUrl = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/config/activities.json`;
-      const res = await fetch(githubUrl, { headers: githubHeaders });
-      if (!res.ok) {
-        return json({ activities: [] }, 200, origin);
-      }
-      const data = await res.json();
-      const content = decodeGithubContent(data.content);
-      const activities = JSON.parse(content);
+      const raw = await env.DATA.get("activities");
+      const activities = raw ? JSON.parse(raw) : [];
       return json({ activities }, 200, origin);
+    }
+
+    // PUT /activities
+    if (path === "/activities" && request.method === "PUT") {
+      const body = await request.json();
+      if (!Array.isArray(body.activities)) {
+        return json({ error: "Ogiltigt format" }, 400, origin);
+      }
+      await env.DATA.put("activities", JSON.stringify(body.activities));
+      return json({ ok: true }, 200, origin);
+    }
+
+    // Validate user param for bookings/schedule
+    function getUser() {
+      const user = url.searchParams.get("user");
+      if (!user || !ALLOWED_USERS.includes(user)) return null;
+      return user;
     }
 
     // GET /bookings?user=xxx
     if (path === "/bookings" && request.method === "GET") {
-      const user = url.searchParams.get("user");
-      if (!user || !ALLOWED_USERS.includes(user)) {
-        return json({ error: "Ogiltig användare" }, 400, origin);
-      }
-      const githubUrl = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/config/bookings-${user}.json`;
-      const res = await fetch(githubUrl, { headers: githubHeaders });
-      if (!res.ok) {
-        return json({ bookings: [] }, 200, origin);
-      }
-      const data = await res.json();
-      const content = decodeGithubContent(data.content);
-      const bookings = JSON.parse(content);
+      const user = getUser();
+      if (!user) return json({ error: "Ogiltig användare" }, 400, origin);
+      const raw = await env.DATA.get(`bookings:${user}`);
+      const bookings = raw ? JSON.parse(raw) : [];
       return json({ bookings }, 200, origin);
+    }
+
+    // PUT /bookings?user=xxx
+    if (path === "/bookings" && request.method === "PUT") {
+      const user = getUser();
+      if (!user) return json({ error: "Ogiltig användare" }, 400, origin);
+      const body = await request.json();
+      if (!Array.isArray(body.bookings)) {
+        return json({ error: "Ogiltigt format" }, 400, origin);
+      }
+      await env.DATA.put(`bookings:${user}`, JSON.stringify(body.bookings));
+      return json({ ok: true }, 200, origin);
     }
 
     // /schedule endpoints
     if (path === "/schedule") {
-      const user = url.searchParams.get("user");
-      if (!user || !ALLOWED_USERS.includes(user)) {
-        return json({ error: "Ogiltig användare" }, 400, origin);
-      }
-
-      const filePath = `config/${user}.json`;
-      const githubUrl = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${filePath}`;
+      const user = getUser();
+      if (!user) return json({ error: "Ogiltig användare" }, 400, origin);
 
       if (request.method === "GET") {
-        const res = await fetch(githubUrl, { headers: githubHeaders });
-        if (!res.ok) {
-          return json({ error: "Kunde inte hämta schema" }, 502, origin);
-        }
-        const data = await res.json();
-        const content = decodeGithubContent(data.content);
-        const schedule = JSON.parse(content);
-        return json({ schedule, sha: data.sha }, 200, origin);
+        const raw = await env.DATA.get(`schedule:${user}`);
+        const schedule = raw ? JSON.parse(raw) : [];
+        return json({ schedule }, 200, origin);
       }
 
       if (request.method === "PUT") {
         const body = await request.json();
-        if (!Array.isArray(body.schedule) || !body.sha) {
+        if (!Array.isArray(body.schedule)) {
           return json({ error: "Ogiltigt format" }, 400, origin);
         }
-
-        const content = btoa(unescape(encodeURIComponent(
-          JSON.stringify(body.schedule, null, 2) + "\n"
-        )));
-
-        const res = await fetch(githubUrl, {
-          method: "PUT",
-          headers: { ...githubHeaders, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            message: `Uppdatera schema för ${user}`,
-            content,
-            sha: body.sha,
-          }),
-        });
-
-        if (!res.ok) {
-          const err = await res.json();
-          if (res.status === 409) {
-            return json({ error: "Schemat ändrades av någon annan. Ladda om sidan." }, 409, origin);
-          }
-          return json({ error: "Kunde inte spara: " + (err.message || res.status) }, 502, origin);
-        }
-
-        const result = await res.json();
-        return json({ ok: true, sha: result.content.sha }, 200, origin);
+        await env.DATA.put(`schedule:${user}`, JSON.stringify(body.schedule));
+        return json({ ok: true }, 200, origin);
       }
     }
 

@@ -1,13 +1,13 @@
 import json
 import logging
 import os
-import subprocess
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import click
+import requests
 from dotenv import load_dotenv
 
 from friskis_booker.api import BRPClient
@@ -32,13 +32,14 @@ log = logging.getLogger(__name__)
 
 USERS = ["peter", "alexandra"]
 CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
+WORKER_URL = os.environ.get("WORKER_URL", "https://friskis-schedule.peter-schon1974.workers.dev")
+WORKER_PIN = os.environ.get("WORKER_PIN", "")
 
 
 def get_credentials(user: str) -> tuple[str, str]:
     suffix = user.upper()
     username = os.environ.get(f"FRISKIS_USERNAME_{suffix}", "")
     password = os.environ.get(f"FRISKIS_PASSWORD_{suffix}", "")
-    # Fallback: old env vars for peter (backwards compat)
     if not username and user == "peter":
         username = os.environ.get("FRISKIS_USERNAME", "")
     if not password and user == "peter":
@@ -47,6 +48,48 @@ def get_credentials(user: str) -> tuple[str, str]:
         click.echo(f"Sätt FRISKIS_USERNAME_{suffix} och FRISKIS_PASSWORD_{suffix} som miljövariabler eller i .env")
         sys.exit(1)
     return username, password
+
+
+def worker_get(path, params=None):
+    """GET from worker API."""
+    if not WORKER_PIN:
+        return None
+    try:
+        resp = requests.get(f"{WORKER_URL}{path}", params=params,
+                            headers={"X-Pin": WORKER_PIN}, timeout=10)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        return None
+
+
+def worker_put(path, data, params=None):
+    """PUT to worker API."""
+    if not WORKER_PIN:
+        return None
+    try:
+        resp = requests.put(f"{WORKER_URL}{path}", json=data, params=params,
+                            headers={"X-Pin": WORKER_PIN, "Content-Type": "application/json"},
+                            timeout=10)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        return None
+
+
+def load_schedule_for_user(user, schedule_path=None):
+    """Load schedule: try worker API first, fall back to local file."""
+    if schedule_path:
+        return load_schedule(schedule_path)
+    data = worker_get("/schedule", params={"user": user})
+    if data and "schedule" in data:
+        log.info("Schema hämtat från KV (%d poster)", len(data["schedule"]))
+        return data["schedule"]
+    local_path = CONFIG_DIR / f"{user}.json"
+    if local_path.exists():
+        log.info("Fallback: läser schema från lokal fil")
+        return load_schedule(str(local_path))
+    return []
 
 
 def get_schedule_path(user: str) -> Path:
@@ -71,7 +114,11 @@ def cli():
 def book(schedule_path, dry_run, user):
     """Boka schemalagda pass."""
     username, password = get_credentials(user)
-    schedule = load_schedule(schedule_path or str(get_schedule_path(user)))
+    schedule = load_schedule_for_user(user, schedule_path)
+
+    if not schedule:
+        click.echo(f"Inget schema för {user}.")
+        return
 
     client = BRPClient()
     client.login(username, password)
@@ -90,7 +137,7 @@ def book(schedule_path, dry_run, user):
 @user_option
 def list_schedule(schedule_path, user):
     """Visa konfigurerat schema."""
-    schedule = load_schedule(schedule_path or str(get_schedule_path(user)))
+    schedule = load_schedule_for_user(user, schedule_path)
     click.echo(f"Konfigurerat schema för {user}:")
     for entry in schedule:
         day = WEEKDAYS[entry["weekday"] - 1]
@@ -104,7 +151,7 @@ def list_schedule(schedule_path, user):
 def check(schedule_path, user):
     """Visa tillgängliga pass utan att boka."""
     username, password = get_credentials(user)
-    schedule = load_schedule(schedule_path or str(get_schedule_path(user)))
+    schedule = load_schedule_for_user(user, schedule_path)
 
     client = BRPClient()
     client.login(username, password)
@@ -118,17 +165,18 @@ def check(schedule_path, user):
         click.echo(f"  {r['activity']} {r['time']} — {r['status']}")
 
 
-def save_and_push(schedule, push, user):
+def save_schedule(schedule, user, sync=True):
+    """Save schedule locally and sync to KV."""
     schedule_path = get_schedule_path(user)
     with open(schedule_path, "w") as f:
         json.dump(schedule, f, indent=2, ensure_ascii=False)
-    click.echo(f"\nSparat till {schedule_path}")
-    if push:
-        repo_root = Path(__file__).resolve().parent.parent
-        subprocess.run(["git", "add", f"config/{user}.json"], cwd=repo_root)
-        subprocess.run(["git", "commit", "-m", f"Uppdatera schema för {user}"], cwd=repo_root)
-        subprocess.run(["git", "push"], cwd=repo_root)
-        click.echo("Pushat till GitHub!")
+    click.echo(f"\nSparat lokalt till {schedule_path}")
+    if sync:
+        result = worker_put("/schedule", {"schedule": schedule}, params={"user": user})
+        if result and result.get("ok"):
+            click.echo("Synkat till KV!")
+        else:
+            click.echo("Varning: kunde inte synka till KV.")
 
 
 def fetch_available_activities(client):
@@ -187,15 +235,15 @@ def print_schedule(schedule, header="Nuvarande schema"):
 
 
 @cli.command()
-@click.option("--push/--no-push", default=True, help="Committa och pusha till GitHub")
+@click.option("--sync/--no-sync", default=True, help="Synka till KV")
 @user_option
-def add(push, user):
+def add(sync, user):
     """Lägg till pass i schemat."""
     username, password = get_credentials(user)
     client = BRPClient()
     client.login(username, password)
 
-    current = load_schedule(str(get_schedule_path(user)))
+    current = load_schedule_for_user(user)
     current_set = {entry_key(e) for e in current}
 
     print_schedule(current)
@@ -203,7 +251,6 @@ def add(push, user):
     click.echo("\nHämtar tillgängliga pass...")
     all_choices = fetch_available_activities(client)
 
-    # Visa bara pass som inte redan finns i schemat
     available = [c for c in all_choices if entry_key(c) not in current_set]
 
     if not available:
@@ -237,15 +284,15 @@ def add(push, user):
 
     updated = current + to_add
     print_schedule(updated, "Uppdaterat schema")
-    save_and_push(updated, push, user)
+    save_schedule(updated, user, sync)
 
 
 @cli.command()
-@click.option("--push/--no-push", default=True, help="Committa och pusha till GitHub")
+@click.option("--sync/--no-sync", default=True, help="Synka till KV")
 @user_option
-def remove(push, user):
+def remove(sync, user):
     """Ta bort pass från schemat."""
-    current = load_schedule(str(get_schedule_path(user)))
+    current = load_schedule_for_user(user)
 
     if not current:
         click.echo("Schemat är tomt.")
@@ -278,13 +325,13 @@ def remove(push, user):
 
     updated = [e for i, e in enumerate(sorted_schedule) if i not in to_remove]
     print_schedule(updated, "Uppdaterat schema")
-    save_and_push(updated, push, user)
+    save_schedule(updated, user, sync)
 
 
 @cli.command("dump-activities")
-@click.option("--push/--no-push", default=True, help="Committa och pusha till GitHub")
-def dump_activities(push):
-    """Hämta tillgängliga pass och spara till config/activities.json."""
+@click.option("--sync/--no-sync", default=True, help="Synka till KV")
+def dump_activities(sync):
+    """Hämta tillgängliga pass och synka till KV."""
     username, password = get_credentials("peter")
     client = BRPClient()
     client.login(username, password)
@@ -295,21 +342,21 @@ def dump_activities(push):
     activities_path = CONFIG_DIR / "activities.json"
     with open(activities_path, "w") as f:
         json.dump(activities, f, indent=2, ensure_ascii=False)
-    click.echo(f"Sparade {len(activities)} pass till {activities_path}")
+    click.echo(f"Sparade {len(activities)} pass lokalt")
 
-    if push:
-        repo_root = Path(__file__).resolve().parent.parent
-        subprocess.run(["git", "add", "config/activities.json"], cwd=repo_root)
-        subprocess.run(["git", "commit", "-m", "Uppdatera tillgängliga pass"], cwd=repo_root)
-        subprocess.run(["git", "push"], cwd=repo_root)
-        click.echo("Pushat till GitHub!")
+    if sync:
+        result = worker_put("/activities", {"activities": activities})
+        if result and result.get("ok"):
+            click.echo("Synkat till KV!")
+        else:
+            click.echo("Varning: kunde inte synka till KV.")
 
 
 @cli.command("dump-bookings")
 @user_option
-@click.option("--push/--no-push", default=True, help="Committa och pusha till GitHub")
-def dump_bookings(user, push):
-    """Hämta bokade pass och spara till config/bookings-{user}.json."""
+@click.option("--sync/--no-sync", default=True, help="Synka till KV")
+def dump_bookings(user, sync):
+    """Hämta bokade pass och synka till KV."""
     username, password = get_credentials(user)
     client = BRPClient()
     client.login(username, password)
@@ -346,11 +393,11 @@ def dump_bookings(user, push):
     bookings_path = CONFIG_DIR / f"bookings-{user}.json"
     with open(bookings_path, "w") as f:
         json.dump(bookings, f, indent=2, ensure_ascii=False)
-    click.echo(f"Sparade {len(bookings)} bokningar till {bookings_path}")
+    click.echo(f"Sparade {len(bookings)} bokningar lokalt")
 
-    if push:
-        repo_root = Path(__file__).resolve().parent.parent
-        subprocess.run(["git", "add", f"config/bookings-{user}.json"], cwd=repo_root)
-        subprocess.run(["git", "commit", "-m", f"Uppdatera bokningar för {user}"], cwd=repo_root)
-        subprocess.run(["git", "push"], cwd=repo_root)
-        click.echo("Pushat till GitHub!")
+    if sync:
+        result = worker_put("/bookings", {"bookings": bookings}, params={"user": user})
+        if result and result.get("ok"):
+            click.echo("Synkat till KV!")
+        else:
+            click.echo("Varning: kunde inte synka till KV.")

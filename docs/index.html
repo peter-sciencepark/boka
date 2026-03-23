@@ -221,7 +221,6 @@
     let pin = localStorage.getItem("friskis-pin") || "";
     let currentUser = "alexandra";
     let schedule = [];
-    let sha = "";
     let dirty = false;
     let availableActivities = [];
     let bookings = [];
@@ -258,7 +257,6 @@
         localStorage.setItem("friskis-pin", pin);
         const data = await res.json();
         schedule = data.schedule;
-        sha = data.sha;
         dirty = false;
 
         document.getElementById("auth-section").classList.add("hidden");
@@ -335,7 +333,6 @@
         if (!res.ok) throw new Error("Kunde inte hämta schema");
         const data = await res.json();
         schedule = data.schedule;
-        sha = data.sha;
         dirty = false;
         render();
         loadBookings();
@@ -450,20 +447,14 @@
             "Content-Type": "application/json",
             "X-Pin": pin,
           },
-          body: JSON.stringify({ schedule, sha }),
+          body: JSON.stringify({ schedule }),
         });
 
         const data = await res.json();
         if (!res.ok) {
-          if (res.status === 409) {
-            showToast(data.error, true);
-            await switchUser(currentUser);
-            return;
-          }
           throw new Error(data.error || "Okänt fel");
         }
 
-        sha = data.sha;
         dirty = false;
         render();
         showToast("Schema sparat!");

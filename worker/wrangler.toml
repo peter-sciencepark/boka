@@ -5,3 +5,7 @@ compatibility_date = "2024-12-01"
 [[kv_namespaces]]
 binding = "RATE_LIMIT"
 id = "70d38205000f435194f7900e68bf5ea4"
+
+[[kv_namespaces]]
+binding = "DATA"
+id = "8b05c204e812452b817de6eab660f0c5"
