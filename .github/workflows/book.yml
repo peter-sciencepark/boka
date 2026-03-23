@@ -6,6 +6,9 @@ on:
     - cron: '*/30 15-19 * * *'   # Var 30:e min, 16-20 CET (15-19 UTC)
   workflow_dispatch: {}
 
+permissions:
+  contents: write
+
 jobs:
   update-data:
     runs-on: ubuntu-latest
