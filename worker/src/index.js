@@ -3,6 +3,10 @@ const REPO_NAME = "boka";
 const ALLOWED_USERS = ["peter", "alexandra"];
 const ALLOWED_ORIGIN = "https://peter-sciencepark.github.io";
 
+// Rate limiting: max failed PIN attempts per IP
+const MAX_FAILURES = 5;
+const LOCKOUT_SECONDS = 900; // 15 min
+
 function corsHeaders(origin) {
   return {
     "Access-Control-Allow-Origin": origin === ALLOWED_ORIGIN ? ALLOWED_ORIGIN : "",
@@ -24,6 +28,24 @@ function decodeGithubContent(base64Content) {
   return new TextDecoder().decode(bytes);
 }
 
+async function checkRateLimit(ip, kv) {
+  const key = `fail:${ip}`;
+  const val = await kv.get(key);
+  const failures = val ? parseInt(val, 10) : 0;
+  return failures >= MAX_FAILURES;
+}
+
+async function recordFailure(ip, kv) {
+  const key = `fail:${ip}`;
+  const val = await kv.get(key);
+  const failures = val ? parseInt(val, 10) : 0;
+  await kv.put(key, String(failures + 1), { expirationTtl: LOCKOUT_SECONDS });
+}
+
+async function clearFailures(ip, kv) {
+  await kv.delete(`fail:${ip}`);
+}
+
 export default {
   async fetch(request, env) {
     const origin = request.headers.get("Origin") || "";
@@ -34,12 +56,23 @@ export default {
 
     const url = new URL(request.url);
     const path = url.pathname;
+    const ip = request.headers.get("CF-Connecting-IP") || "unknown";
 
-    // PIN auth (all endpoints)
+    // Rate limit check — before PIN auth
+    const blocked = await checkRateLimit(ip, env.RATE_LIMIT);
+    if (blocked) {
+      return json({ error: "För många misslyckade försök. Vänta 15 minuter." }, 429, origin);
+    }
+
+    // PIN auth
     const pin = request.headers.get("X-Pin") || "";
     if (!pin || pin !== env.PIN) {
+      await recordFailure(ip, env.RATE_LIMIT);
       return json({ error: "Fel PIN-kod" }, 401, origin);
     }
+
+    // Successful auth — clear any previous failures
+    await clearFailures(ip, env.RATE_LIMIT);
 
     const githubHeaders = {
       Authorization: `token ${env.GITHUB_PAT}`,
@@ -47,7 +80,7 @@ export default {
       "User-Agent": "friskis-schedule-worker",
     };
 
-    // GET /activities — return available activities from config/activities.json
+    // GET /activities
     if (path === "/activities" && request.method === "GET") {
       const githubUrl = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/config/activities.json`;
       const res = await fetch(githubUrl, { headers: githubHeaders });
@@ -60,7 +93,7 @@ export default {
       return json({ activities }, 200, origin);
     }
 
-    // GET /bookings?user=xxx — return booked activities
+    // GET /bookings?user=xxx
     if (path === "/bookings" && request.method === "GET") {
       const user = url.searchParams.get("user");
       if (!user || !ALLOWED_USERS.includes(user)) {
