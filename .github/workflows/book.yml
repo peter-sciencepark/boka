@@ -56,6 +56,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: update-data
     strategy:
+      fail-fast: false
       matrix:
         user: [peter, alexandra]
     steps:
@@ -70,7 +71,36 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Check credentials
+        id: creds
+        env:
+          FRISKIS_USERNAME_PETER: ${{ secrets.FRISKIS_USERNAME_PETER }}
+          FRISKIS_PASSWORD_PETER: ${{ secrets.FRISKIS_PASSWORD_PETER }}
+          FRISKIS_USERNAME_ALEXANDRA: ${{ secrets.FRISKIS_USERNAME_ALEXANDRA }}
+          FRISKIS_PASSWORD_ALEXANDRA: ${{ secrets.FRISKIS_PASSWORD_ALEXANDRA }}
+          FRISKIS_USERNAME: ${{ secrets.FRISKIS_USERNAME }}
+          FRISKIS_PASSWORD: ${{ secrets.FRISKIS_PASSWORD }}
+          USER: ${{ matrix.user }}
+        run: |
+          SUFFIX=$(echo "$USER" | tr '[:lower:]' '[:upper:]')
+          U_VAR="FRISKIS_USERNAME_${SUFFIX}"
+          P_VAR="FRISKIS_PASSWORD_${SUFFIX}"
+          U_VAL="${!U_VAR}"
+          P_VAL="${!P_VAR}"
+          # Fallback for peter
+          if [ "$USER" = "peter" ] && [ -z "$U_VAL" ]; then U_VAL="$FRISKIS_USERNAME"; fi
+          if [ "$USER" = "peter" ] && [ -z "$P_VAL" ]; then P_VAL="$FRISKIS_PASSWORD"; fi
+          if [ -z "$U_VAL" ] || [ -z "$P_VAL" ]; then
+            echo "⚠️ Credentials saknas för $USER — hoppar över bokning"
+            echo "  Lägg till FRISKIS_USERNAME_${SUFFIX} och FRISKIS_PASSWORD_${SUFFIX} som GitHub secrets"
+            echo "has_creds=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "✅ Credentials finns för $USER"
+            echo "has_creds=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run booker
+        if: steps.creds.outputs.has_creds == 'true'
         env:
           FRISKIS_USERNAME_PETER: ${{ secrets.FRISKIS_USERNAME_PETER }}
           FRISKIS_PASSWORD_PETER: ${{ secrets.FRISKIS_PASSWORD_PETER }}
