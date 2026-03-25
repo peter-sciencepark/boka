@@ -74,11 +74,7 @@ def is_bookable(activity: dict) -> tuple[bool, str]:
     if cancelled:
         return False, "inställt"
 
-    slots = activity.get("slots", {})
-    total = slots.get("total", 0)
-    booked = slots.get("booked", 0)
-    if total > 0 and booked >= total:
-        return False, "fullbokat"
+    # Ingen slot-check — API:et ställer i kö automatiskt vid fullbokat
 
     earliest_str = activity.get("bookableEarliest", "")
     if earliest_str:
@@ -164,9 +160,13 @@ def run_booking(
                 continue
 
             try:
-                client.book_activity(act_id)
-                log.info("Bokad: %s %s", act_name, act_start)
-                results.append({"activity": act_name, "time": act_start, "status": "bokad"})
+                resp = client.book_activity(act_id)
+                if "waitingListBooking" in resp or resp.get("type") == "waitingListBooking":
+                    log.info("Ställd i kö: %s %s", act_name, act_start)
+                    results.append({"activity": act_name, "time": act_start, "status": "kö"})
+                else:
+                    log.info("Bokad: %s %s", act_name, act_start)
+                    results.append({"activity": act_name, "time": act_start, "status": "bokad"})
             except Exception as e:
                 log.error("Misslyckades boka %s %s: %s", act_name, act_start, e)
                 results.append({"activity": act_name, "time": act_start, "status": f"fel: {e}"})
