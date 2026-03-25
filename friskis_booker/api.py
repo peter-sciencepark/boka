@@ -69,7 +69,7 @@ class BRPClient:
         username = self.auth["username"]
         resp = self.session.post(
             f"{BASE_URL}/customers/{username}/bookings/groupactivities",
-            json={"groupActivity": activity_id},
+            json={"groupActivity": activity_id, "allowWaitingList": True},
             timeout=TIMEOUT,
         )
         if not resp.ok:
