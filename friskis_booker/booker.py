@@ -58,9 +58,10 @@ def matches_entry(activity: dict, entry: dict, location: str | None = None) -> b
         return False
 
     if entry.get("time"):
-        expected = entry["time"]
-        actual = start.strftime("%H:%M")
-        if actual != expected:
+        expected_h, expected_m = map(int, entry["time"].split(":"))
+        expected_minutes = expected_h * 60 + expected_m
+        actual_minutes = start.hour * 60 + start.minute
+        if abs(actual_minutes - expected_minutes) > 60:
             return False
 
     return True
