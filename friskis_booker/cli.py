@@ -354,21 +354,22 @@ def booking_windows():
         all_windows.extend(windows)
 
     if not all_windows:
-        click.echo("Inga obokade pass hittades.")
+        click.echo("Inga matchande pass hittades.")
         return
 
     # Sort by bookableEarliest
     all_windows.sort(key=lambda w: w["bookableEarliest"] or datetime.max.replace(tzinfo=TZ))
 
     click.echo("\nBokningsfönster för nästa vecka:\n")
-    click.echo(f"  {'ANVÄNDARE':<12} {'PASS':<25} {'PASSSTART':<18} {'BOKNING ÖPPNAR':<18}")
-    click.echo(f"  {'-'*12} {'-'*25} {'-'*18} {'-'*18}")
+    click.echo(f"  {'ANVÄNDARE':<12} {'PASS':<25} {'PASSSTART':<18} {'BOKNING ÖPPNAR':<18} {'STATUS'}")
+    click.echo(f"  {'-'*12} {'-'*25} {'-'*18} {'-'*18} {'-'*10}")
     for w in all_windows:
         user_name = w["user"]
         name = w["activity"]
         start = w["start"].strftime("%a %H:%M") if w["start"] else "?"
-        earliest = w["bookableEarliest"].strftime("%a %H:%M") if w["bookableEarliest"] else "okänt"
-        click.echo(f"  {user_name:<12} {name:<25} {start:<18} {earliest:<18}")
+        earliest = w["bookableEarliest"].strftime("%a %d/%m %H:%M") if w["bookableEarliest"] else "okänt"
+        status = "✅ bokad" if w.get("booked") else "⏳ ej bokad"
+        click.echo(f"  {user_name:<12} {name:<25} {start:<18} {earliest:<18} {status}")
 
     # Calculate optimal cron windows
     click.echo("\n--- Optimala körtider (CET) ---\n")

@@ -214,9 +214,6 @@ def get_booking_windows(
                 continue
 
             act_id = activity["id"]
-            if act_id in booked_ids:
-                continue  # Already booked, skip
-
             act_name = activity.get("name", "?")
             start_str = activity.get("duration", {}).get("start", "?")
             earliest_str = activity.get("bookableEarliest", "")
@@ -234,6 +231,7 @@ def get_booking_windows(
                 "start": act_start,
                 "bookableEarliest": earliest,
                 "location": loc,
+                "booked": act_id in booked_ids,
             })
 
     return windows
