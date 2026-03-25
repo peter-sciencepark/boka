@@ -2,8 +2,15 @@ name: Friskis Auto-Book
 
 on:
   schedule:
-    - cron: '50 6 * * *'         # 07:50 CET (06:50 UTC)
-    - cron: '*/30 15-19 * * *'   # Var 30:e min, 16-20 CET (15-19 UTC)
+    # Glest: varje timme 07:00-19:00 CET (06-18 UTC)
+    - cron: '0 6-18 * * *'
+    # Tätt: var 15:e minut 04:00-08:00 UTC (05:00-09:00 CET)
+    # Bokningar öppnar typiskt 36h innan pass — morgonpass (06-09)
+    # öppnar kvällen innan (18-21), kvällspass (17-20) öppnar tidigt morgon (05-08)
+    - cron: '*/15 4-7 * * *'
+    # Tätt: var 15:e minut 16:00-20:00 UTC (17:00-21:00 CET)
+    # Fångar bokningsöppningar för pass nästa dags eftermiddag/kväll
+    - cron: '*/15 16-19 * * *'
   workflow_dispatch: {}
 
 jobs:

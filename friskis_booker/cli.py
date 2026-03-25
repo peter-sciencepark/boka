@@ -19,6 +19,7 @@ from friskis_booker.booker import (
     load_schedule,
     parse_dt,
     run_booking,
+    get_booking_windows,
 )
 
 load_dotenv()
@@ -326,6 +327,82 @@ def remove(sync, user):
     updated = [e for i, e in enumerate(sorted_schedule) if i not in to_remove]
     print_schedule(updated, "Uppdaterat schema")
     save_schedule(updated, user, sync)
+
+
+@cli.command("booking-windows")
+def booking_windows():
+    """Visa när bokning öppnar för alla användares schemalagda pass."""
+    all_windows = []
+
+    for user in USERS:
+        try:
+            username, password = get_credentials(user)
+        except SystemExit:
+            log.info("Hoppar över %s (inga credentials)", user)
+            continue
+
+        schedule = load_schedule_for_user(user)
+        if not schedule:
+            log.info("Inget schema för %s", user)
+            continue
+
+        client = BRPClient()
+        client.login(username, password)
+        windows = get_booking_windows(client, schedule)
+        for w in windows:
+            w["user"] = user
+        all_windows.extend(windows)
+
+    if not all_windows:
+        click.echo("Inga obokade pass hittades.")
+        return
+
+    # Sort by bookableEarliest
+    all_windows.sort(key=lambda w: w["bookableEarliest"] or datetime.max.replace(tzinfo=TZ))
+
+    click.echo("\nBokningsfönster för nästa vecka:\n")
+    click.echo(f"  {'ANVÄNDARE':<12} {'PASS':<25} {'PASSSTART':<18} {'BOKNING ÖPPNAR':<18}")
+    click.echo(f"  {'-'*12} {'-'*25} {'-'*18} {'-'*18}")
+    for w in all_windows:
+        user_name = w["user"]
+        name = w["activity"]
+        start = w["start"].strftime("%a %H:%M") if w["start"] else "?"
+        earliest = w["bookableEarliest"].strftime("%a %H:%M") if w["bookableEarliest"] else "okänt"
+        click.echo(f"  {user_name:<12} {name:<25} {start:<18} {earliest:<18}")
+
+    # Calculate optimal cron windows
+    click.echo("\n--- Optimala körtider (CET) ---\n")
+    hours_with_openings = set()
+    for w in all_windows:
+        if w["bookableEarliest"]:
+            h = w["bookableEarliest"].hour
+            hours_with_openings.add(h)
+
+    if hours_with_openings:
+        sorted_hours = sorted(hours_with_openings)
+        click.echo(f"  Pass öppnar vid dessa timmar (CET): {', '.join(f'{h:02d}:00' for h in sorted_hours)}")
+
+        now = datetime.now(TZ)
+        utc_offset = now.utcoffset().total_seconds() / 3600
+        click.echo(f"  (nuvarande offset CET→UTC: -{int(utc_offset)}h)\n")
+
+        # Dense hours: run every 15 min during booking opening hours
+        dense_utc = set()
+        for h in sorted_hours:
+            utc_h = int(h - utc_offset) % 24
+            dense_utc.add(utc_h)
+            dense_utc.add((utc_h - 1) % 24)
+
+        all_run_hours = set(range(7, 19))
+        all_run_utc = {int(h - utc_offset) % 24 for h in all_run_hours}
+        sparse_utc = all_run_utc - dense_utc
+
+        if dense_utc:
+            dense_str = ",".join(str(h) for h in sorted(dense_utc))
+            click.echo(f"  Tätt (var 15:e min):  */15 {dense_str} * * *")
+        if sparse_utc:
+            sparse_str = ",".join(str(h) for h in sorted(sparse_utc))
+            click.echo(f"  Glest (varje timme):  0 {sparse_str} * * *")
 
 
 @cli.command("dump-activities")

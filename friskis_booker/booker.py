@@ -171,3 +171,69 @@ def run_booking(
                 results.append({"activity": act_name, "time": act_start, "status": f"fel: {e}"})
 
     return results
+
+
+def get_booking_windows(
+    client: BRPClient,
+    schedule: list[dict],
+) -> list[dict]:
+    """Return bookableEarliest times for all scheduled activities next week."""
+    now = datetime.now(TZ)
+    days_until_monday = (7 - now.weekday()) % 7 or 7
+    next_monday = now + timedelta(days=days_until_monday)
+    next_sunday = next_monday + timedelta(days=6)
+    start = next_monday.strftime("%Y-%m-%d")
+    end = next_sunday.strftime("%Y-%m-%d")
+
+    activities = []
+    for loc in LOCATIONS:
+        bid = client.get_business_unit_id(loc)
+        if bid is None:
+            continue
+        for a in client.get_group_activities(bid, start, end):
+            s = a.get("duration", {}).get("start", "")
+            if s:
+                dt = parse_dt(s).astimezone(TZ)
+                if next_monday.date() <= dt.date() <= next_sunday.date():
+                    activities.append((a, loc))
+
+    existing_bookings = client.get_bookings()
+    booked_ids = set()
+    for b in existing_bookings:
+        ga = b.get("groupActivity")
+        if ga:
+            if isinstance(ga, dict):
+                booked_ids.add(ga.get("id"))
+            else:
+                booked_ids.add(ga)
+
+    windows = []
+    for entry in schedule:
+        for activity, loc in activities:
+            if not matches_entry(activity, entry, loc):
+                continue
+
+            act_id = activity["id"]
+            if act_id in booked_ids:
+                continue  # Already booked, skip
+
+            act_name = activity.get("name", "?")
+            start_str = activity.get("duration", {}).get("start", "?")
+            earliest_str = activity.get("bookableEarliest", "")
+            act_start = parse_dt(start_str).astimezone(TZ) if start_str != "?" else None
+
+            earliest = None
+            if earliest_str:
+                earliest = parse_dt(earliest_str)
+                if earliest.tzinfo is None:
+                    earliest = earliest.replace(tzinfo=TZ)
+                earliest = earliest.astimezone(TZ)
+
+            windows.append({
+                "activity": act_name,
+                "start": act_start,
+                "bookableEarliest": earliest,
+                "location": loc,
+            })
+
+    return windows
