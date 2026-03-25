@@ -46,6 +46,19 @@ jobs:
           WORKER_PIN: ${{ secrets.WORKER_PIN }}
         run: python -m friskis_booker dump-bookings --user peter
 
+      - name: Show booking windows
+        env:
+          FRISKIS_USERNAME_PETER: ${{ secrets.FRISKIS_USERNAME_PETER }}
+          FRISKIS_PASSWORD_PETER: ${{ secrets.FRISKIS_PASSWORD_PETER }}
+          FRISKIS_USERNAME_ALEXANDRA: ${{ secrets.FRISKIS_USERNAME_ALEXANDRA }}
+          FRISKIS_PASSWORD_ALEXANDRA: ${{ secrets.FRISKIS_PASSWORD_ALEXANDRA }}
+          FRISKIS_USERNAME: ${{ secrets.FRISKIS_USERNAME }}
+          FRISKIS_PASSWORD: ${{ secrets.FRISKIS_PASSWORD }}
+          WORKER_URL: ${{ secrets.WORKER_URL }}
+          WORKER_PIN: ${{ secrets.WORKER_PIN }}
+        run: python -m friskis_booker booking-windows
+        continue-on-error: true
+
       - name: Dump bookings for Alexandra
         env:
           FRISKIS_USERNAME_ALEXANDRA: ${{ secrets.FRISKIS_USERNAME_ALEXANDRA }}
