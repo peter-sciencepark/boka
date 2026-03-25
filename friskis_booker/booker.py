@@ -168,8 +168,13 @@ def run_booking(
                     log.info("Bokad: %s %s", act_name, act_start)
                     results.append({"activity": act_name, "time": act_start, "status": "bokad"})
             except Exception as e:
-                log.error("Misslyckades boka %s %s: %s", act_name, act_start, e)
-                results.append({"activity": act_name, "time": act_start, "status": f"fel: {e}"})
+                err = str(e)
+                if "ALREADY_ON_WAITING_LIST" in err:
+                    log.info("Redan i kö: %s %s", act_name, act_start)
+                    results.append({"activity": act_name, "time": act_start, "status": "redan i kö"})
+                else:
+                    log.error("Misslyckades boka %s %s: %s", act_name, act_start, e)
+                    results.append({"activity": act_name, "time": act_start, "status": f"fel: {e}"})
 
     return results
 
