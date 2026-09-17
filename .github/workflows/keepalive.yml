@@ -1,0 +1,23 @@
+name: Keepalive
+
+# GitHub stänger av schemalagda workflows efter 60 dagar utan aktivitet i repot.
+# Att anropa "enable" via API:t nollställer den timern utan att skapa commits.
+on:
+  schedule:
+    - cron: '0 6 1,15 * *'
+  workflow_dispatch: {}
+
+permissions:
+  actions: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Re-enable Friskis Auto-Book
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api -X PUT "repos/${{ github.repository }}/actions/workflows/book.yml/enable"
+          gh api -X PUT "repos/${{ github.repository }}/actions/workflows/keepalive.yml/enable"
+          echo "✅ Workflows återaktiverade"
